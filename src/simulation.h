@@ -17,9 +17,9 @@
 
 class Simulation {
 public:
-  int nx, ny, nz; // grid resolution
-  float lx, ly, lz;       // container width
-  float h;        // cell width
+  int nx, ny, nz;   // grid resolution
+  float lx, ly, lz; // container width
+  float h;          // cell width
   // phi data
   Array3f solid_phi, liquid_phi; // solid and fluid signed distances
   int fluid_cell_count;          // for visualization purposes
@@ -43,21 +43,21 @@ public:
     h = lx / static_cast<float>(nx);
     ly = h * ny;
     lz = h * nz;
+    particle_radius = (float)(h * 1.01 * std::sqrt(3.0f) * 0.5f);
     // initialize arrays
     solid_phi.init(nx, ny, nz);
     liquid_phi.init(nx, ny, nz);
     pressure.init(nx, ny, nz);
 
-    u.init(nx+1,ny,nz);
-    v.init(nx,ny+1,nz);
-    w.init(nx,ny,nz+1);
-    tu.init(nx+1,ny,nz);
-    tv.init(nx,ny+1,nz);
-    tw.init(nx,ny,nz+1);
-    u_weight.init(nx+1,ny,nz);
-    v_weight.init(nx,ny+1,nz);
-    w_weight.init(nx,ny,nz+1);
-
+    u.init(nx + 1, ny, nz);
+    v.init(nx, ny + 1, nz);
+    w.init(nx, ny, nz + 1);
+    tu.init(nx + 1, ny, nz);
+    tv.init(nx, ny + 1, nz);
+    tw.init(nx, ny, nz + 1);
+    u_weight.init(nx + 1, ny, nz);
+    v_weight.init(nx, ny + 1, nz);
+    w_weight.init(nx, ny, nz + 1);
 
     // set up solid boundaries
     intialize_boundaries();
@@ -70,22 +70,16 @@ public:
   void intialize_boundaries();
   void step_frame(float time);
   void advance(float dt);
+  glm::vec3 rk2(glm::vec3 position, float dt);
   // simulation methods
-  void particles_to_grid();
-  void save_velocities();
-  void grid_to_particles();
   void advect_particles(float dt);
-  // helper functions
+  void advect(float dt);
+  void add_gravity(float dt);
+  void project(float dt);
+  // particle functions
   void position_to_grid(glm::vec3 p, glm::vec3 offset, glm::ivec3 &index,
                         glm::vec3 &coords);
-  template <class T>
-  void grid_add_quantities(T &arr, T &weights, float q, glm::ivec3 index,
-                           glm::vec3 coords, float mass);
-  template <class T>
-  void grid_add_quantities_constant(T &arr, float q, glm::ivec3 index,
-                                    glm::vec3 coords);
   glm::vec3 trilerp_uvw(glm::vec3 p);
-  glm::vec3 trilerp_dudvdw(glm::vec3 p);
 
   void compute_phi();
 };

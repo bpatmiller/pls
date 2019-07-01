@@ -1,6 +1,5 @@
 #include <glad/glad.h>
 
-#include "geom.h"
 #include "gui.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
@@ -63,7 +62,7 @@ int main(int argc, char *argv[]) {
   glfwSetCursorPosCallback(window, MousePosCallback);
   glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
-  gui.init(2.0f, 25, 25, 25);
+  gui.init(2.0f, 20, 20, 20);
   gui.simulation.add_sphere_phi();
 
   while (!glfwWindowShouldClose(window)) {

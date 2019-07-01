@@ -11,6 +11,10 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   // compile shaders
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");
 
+  std::vector<glm::vec3> box_vertices = {
+      {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f},
+      {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f},
+      {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};
   // scale the grids down to size
   float h = simulation.h;
   for (auto &v : box_vertices) {
@@ -18,18 +22,24 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   }
 
   // add fluid-containing grid cells
-  grid_offsets.resize(simulation.fluid_cell_count);
+  grid_offsets.resize(simulation.liquid_phi.size);
   int fcc = 0;
   for (int i = 1; i < simulation.liquid_phi.sx - 1; i++) {
     for (int j = 1; j < simulation.liquid_phi.sy - 1; j++) {
       for (int k = 1; k < simulation.liquid_phi.sz - 1; k++) {
         if (simulation.liquid_phi(i, j, k) < 0) {
           grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 1.0f);
-          fcc++;
+        } else {
+          grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 0.0f);
         }
+        fcc++;
       }
     }
   }
+
+  box_indices = {{0, 1, 2}, {1, 3, 2}, {4, 6, 5}, {5, 6, 7},
+                 {0, 5, 1}, {0, 4, 5}, {2, 3, 7}, {2, 7, 6},
+                 {3, 1, 5}, {3, 5, 7}, {0, 2, 6}, {0, 6, 4}};
 
   // set up grid VAO
   grid_vao.setLayout({3}, false);
@@ -99,23 +109,21 @@ void GUI::update(float t, bool force) {
     simulation.advance(t);
 
     // update grid vao
-    grid_offsets.clear();
-    grid_offsets.resize(simulation.fluid_cell_count);
     float h = simulation.h;
     int fcc = 0;
     for (int i = 1; i < simulation.liquid_phi.sx - 1; i++) {
       for (int j = 1; j < simulation.liquid_phi.sy - 1; j++) {
         for (int k = 1; k < simulation.liquid_phi.sz - 1; k++) {
-          if (simulation.liquid_phi(i, j, k) < 0) {
-            grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 1.0f);
-            fcc++;
-          }
+          grid_offsets[fcc] =
+              glm::vec4(h * i, h * j, h * k, simulation.liquid_phi(i, j, k));
+          fcc++;
         }
       }
     }
-    grid_vao.ib.set(grid_offsets, 0);
+    grid_vao.ib.update(grid_offsets, 0);
   }
 
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   grid_program.use();
   grid_program.setMat4("projection", projection_matrix);
   grid_program.setMat4("view", view_matrix);
