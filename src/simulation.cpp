@@ -91,12 +91,56 @@ void Simulation::compute_derivatives() {
   }
 }
 
-// compute gradient norm via Godunov scheme
+// compute gradient norm with godunov scheme
 void Simulation::norm_gradient() {
-  norm_grad.clear();
-  for (int i = 0; i < norm_grad.sx; i++) {
-    for (int j = 0; j < norm_grad.sy; j++) {
-      for (int k = 0; k < norm_grad.sz; k++) {
+  norm_grad.set(1);
+  for (int i = 1; i < norm_grad.sx - 1; i++) {
+    for (int j = 1; j < norm_grad.sy - 1; j++) {
+      for (int k = 1; k < norm_grad.sz - 1; k++) {
+        // value for choosing upwinding direction
+        float a = sig(i, j, k);
+        // dxn = dx negative = backwards upwinding
+        // dxp = dx positive = forwards upwinding
+        float dxn = (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k)) / h;
+        float dxp = (liquid_phi(i + 1, j, k) - liquid_phi(i, j, k)) / h;
+        float dyn = (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k)) / h;
+        float dyp = (liquid_phi(i, j + 1, k) - liquid_phi(i, j, k)) / h;
+        float dzn = (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1)) / h;
+        float dzp = (liquid_phi(i, j, k + 1) - liquid_phi(i, j, k)) / h;
+        float phidx = 0;
+        float phidy = 0;
+        float phidz = 0;
+        // phi_dx
+        if (a >= 0) {
+          dxn = (dxn > 0) ? dxn * dxn : 0;
+          dxp = (dxp < 0) ? dxp * dxp : 0;
+          phidx = std::max(dxn, dxp);
+        } else {
+          dxn = (dxn < 0) ? dxn * dxn : 0;
+          dxp = (dxp > 0) ? dxp * dxp : 0;
+          phidx = std::max(dxn, dxp);
+        }
+        // phi_dy
+        if (a >= 0) {
+          dyn = (dyn > 0) ? dyn * dyn : 0;
+          dyp = (dyp < 0) ? dyp * dyp : 0;
+          phidy = std::max(dyn, dyp);
+        } else {
+          dyn = (dyn < 0) ? dyn * dyn : 0;
+          dyp = (dyp > 0) ? dyp * dyp : 0;
+          phidy = std::max(dyn, dyp);
+        }
+        // phi_dz
+        if (a >= 0) {
+          dzn = (dzn > 0) ? dzn * dzn : 0;
+          dzp = (dzp < 0) ? dzp * dzp : 0;
+          phidz = std::max(dzp, dzn);
+        } else {
+          dzn = (dzn < 0) ? dzn * dzn : 0;
+          dzp = (dzp > 0) ? dzp * dzp : 0;
+          phidz = std::max(dzp, dzn);
+        }
+        norm_grad(i, j, k) = std::sqrt(phidx + phidy + phidz);
       }
     }
   }
@@ -104,9 +148,37 @@ void Simulation::norm_gradient() {
 
 void Simulation::reinitialize_phi() {
   // compute sigmoid function for phi_0
-  sig = liquid_phi / (liquid_phi * liquid_phi + h * h);
-
+  sig = liquid_phi / (liquid_phi * liquid_phi +
+                      h * h); // yes this component-wise math is allowed
   norm_gradient();
+
+  float err = 0;
+  float tol = 1e-2;
+  int max_iter = 100;
+  float dt = 0.05f * h;
+  for (int iter = 0; iter <= max_iter; iter++) {
+    if (iter == max_iter)
+      throw std::runtime_error("error: phi reinitialization did not converge");
+
+    // compute updated phi values for one timestep
+    liquid_phi = liquid_phi - sig * (norm_grad - 1) * dt;
+    norm_gradient();
+
+    // recompute gradient norms
+
+    err = 0;
+    for (int i = 0; i < norm_grad.size; i++) {
+      err += std::abs(norm_grad.data[i] - 1.0f);
+    }
+    err /= static_cast<float>(norm_grad.size);
+    std::cout << "err:" << err << "\n";
+
+    // compute error
+    if (err < tol) {
+      std::cout << "phi succesfully reinitialized\n";
+      break;
+    }
+  }
 }
 
 // particle advection with bounds checking

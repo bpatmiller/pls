@@ -216,22 +216,34 @@ template <class T> struct Array3 {
     glm::vec3 grad(0.0f, 0.0f, 0.0f);
     float c = (*this)(i, j, k);
     // x
-    if (v.x < 0) {
+    if (i == 0) {
+      grad.x = ((*this)(i + 1, j, k) - c);
+    } else if (i == sx) {
+      grad.x = (c - (*this)(i - 1, j, k));
+    } else if (v.x < 0) {
       grad.x = ((*this)(i + 1, j, k) - c);
     } else {
       grad.x = (c - (*this)(i - 1, j, k));
     }
     // y
-    if (v.y < 0) {
+    if (j == 0) {
+      grad.y = ((*this)(i, j + 1, k) - c);
+    } else if (j == sy) {
+      grad.y = (c - (*this)(i, j - 1, k));
+    } else if (v.y < 0) {
       grad.y = ((*this)(i, j + 1, k) - c);
     } else {
       grad.y = (c - (*this)(i, j - 1, k));
     }
-    // x
-    if (v.z < 0) {
-      grad.x = ((*this)(i, j, k + 1) - c);
+    // z
+    if (k == 0) {
+      grad.z = ((*this)(i, j, k + 1) - c);
+    } else if (k == sz) {
+      grad.z = (c - (*this)(i, j, k - 1));
+    } else if (v.z < 0) {
+      grad.z = ((*this)(i, j, k + 1) - c);
     } else {
-      grad.x = (c - (*this)(i, j, k - 1));
+      grad.z = (c - (*this)(i, j, k - 1));
     }
 
     return grad / h;
@@ -242,9 +254,6 @@ template <class T> struct Array3 {
     float d_dx = ((*this)(i + 1, j, k) - (*this)(i - 1, j, k));
     float d_dy = ((*this)(i, j + 1, k) - (*this)(i, j - 1, k));
     float d_dz = ((*this)(i, j, k + 1) - (*this)(i, j, k - 1));
-
-    assert((not std::isnan(d_dx)) and (not std::isnan(d_dy)) and
-           (not std::isnan(d_dz)));
 
     return glm::vec3(d_dx, d_dy, d_dz) / (2.0f * h);
   }
