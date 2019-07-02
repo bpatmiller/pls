@@ -153,21 +153,19 @@ void Simulation::reinitialize_phi() {
   norm_gradient();
 
   float err = 0;
-  float tol = 0.25f;
-  int max_iter = 400;
-  float dt = 0.025f * h;
+  float tol = 0.15;
+  int max_iter = 1000;
+  float dt = 0.05f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
       throw std::runtime_error("error: phi reinitialization did not converge");
 
     // compute updated phi values for one timestep
     liquid_phi = liquid_phi - ((sig * (norm_grad - 1)) * dt);
-    norm_gradient();
-
     // recompute gradient norms
-
+    norm_gradient();
+    // compute average error
     err = 0;
-    // average error
     for (int i = 0; i < norm_grad.size; i++) {
       err += std::abs(norm_grad.data[i] - 1.0f);
     }
