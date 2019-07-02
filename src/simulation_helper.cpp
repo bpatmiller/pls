@@ -2,7 +2,7 @@
 
 void Simulation::add_sphere_phi() {
   // create a sphere with radius of 1/4 container size
-  glm::vec3 center(0.5f * nx * h, 0.5f * ny * h, 0.5f * nz * h);
+  glm::vec3 center(0.5f * nx * h, 0.75f * ny * h, 0.5f * nz * h);
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {

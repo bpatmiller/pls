@@ -153,27 +153,27 @@ void Simulation::reinitialize_phi() {
   norm_gradient();
 
   float err = 0;
-  float tol = 1e-2;
-  int max_iter = 100;
-  float dt = 0.05f * h;
+  float tol = 0.25f;
+  int max_iter = 400;
+  float dt = 0.025f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
       throw std::runtime_error("error: phi reinitialization did not converge");
 
     // compute updated phi values for one timestep
-    liquid_phi = liquid_phi - sig * (norm_grad - 1) * dt;
+    liquid_phi = liquid_phi - ((sig * (norm_grad - 1)) * dt);
     norm_gradient();
 
     // recompute gradient norms
 
     err = 0;
+    // average error
     for (int i = 0; i < norm_grad.size; i++) {
       err += std::abs(norm_grad.data[i] - 1.0f);
     }
     err /= static_cast<float>(norm_grad.size);
-    std::cout << "err:" << err << "\n";
+    // std::cout << "err:" << err << "\n";
 
-    // compute error
     if (err < tol) {
       std::cout << "phi succesfully reinitialized\n";
       break;
@@ -219,9 +219,9 @@ glm::vec3 Simulation::rk2(glm::vec3 position, float dt) {
 // advect phi with equation phi_t = - V dot grad phi
 void Simulation::advect_phi(float dt) {
   phi_copy.clear();
-  for (int i = 1; i < liquid_phi.sx - 1; i++) {
-    for (int j = 1; j < liquid_phi.sy - 1; j++) {
-      for (int k = 1; k < liquid_phi.sz - 1; k++) {
+  for (int i = 0; i < liquid_phi.sx; i++) {
+    for (int j = 0; j < liquid_phi.sy; j++) {
+      for (int k = 0; k < liquid_phi.sz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
 
         glm::vec3 velocity = trilerp_uvw(position);
@@ -288,7 +288,7 @@ void Simulation::enforce_boundaries() {
       for (int k = 0; k < solid_phi.sz; k++) {
         // if solid cell, set face velocities to 0
         if (solid_phi(i, j, k) < 0) {
-          liquid_phi(i, j, k) = 0.5f * h;
+          liquid_phi(i, j, k) = std::max(liquid_phi(i, j, k), 0.5f * h);
           u(i, j, k) = 0;
           u(i + 1, j, k) = 0;
           v(i, j, k) = 0;
@@ -324,7 +324,7 @@ void Simulation::advance(float dt) {
     advect_velocity(substep);
     add_gravity(substep);
     enforce_boundaries();
-    project(substep);
+    // project(substep);
     // extrapolate(u, u_valid);
     // extrapolate(v, v_valid);
     // extrapolate(w, w_valid);
