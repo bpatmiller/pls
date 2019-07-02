@@ -107,8 +107,6 @@ void Simulation::reinitialize_phi() {
   sig = liquid_phi / (liquid_phi * liquid_phi + h * h);
 
   norm_gradient();
-
-
 }
 
 // particle advection with bounds checking
@@ -210,23 +208,7 @@ void Simulation::advect_velocity(float dt) {
 }
 
 // apply acceleration due to gravity
-void Simulation::add_gravity(float dt) {
-  for (int i = 0; i < v.size; i++) {
-    v.data[i] -= 9.8f * dt;
-  }
-
-  // create vortex
-  // for (int i = 1; i < nx; i++) {
-  //   for (int j = 1; j < ny; j++) {
-  //     for (int k = 1; k < nz; k++) {
-  //       glm::vec3 center(lx/2.0f, ly/2.0f, lz/2.0f);
-  //       glm::vec3 position((i+0.5f)*h,(j+0.5f)*h,(k+0.5f)*h);
-  //       glm::vec3 n = center - position;
-
-  //     }
-  //   }
-  // }
-}
+void Simulation::add_gravity(float dt) { v -= 9.8 * dt; }
 
 void Simulation::enforce_boundaries() {
   for (int i = 0; i < solid_phi.sx; i++) {
