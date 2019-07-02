@@ -2,6 +2,10 @@
 
 #include <cstring> // used for memset
 #include <glm/glm.hpp>
+#include <iostream>
+#include <vector>
+
+// lerp and bilerp inlines
 
 template <class S, class T>
 inline S lerp(const S &value0, const S &value1, T f) {
@@ -14,35 +18,24 @@ inline S bilerp(const S &v00, const S &v10, const S &v01, const S &v11, T fx,
   return lerp(lerp(v00, v10, fx), lerp(v01, v11, fx), fy);
 }
 
+// class definition
+
 template <class T> struct Array3 {
-  int sx, sy, sz;
-  int size;
-  T *data;
+  int sx = 0;
+  int sy = 0;
+  int sz = 0;
+  int size = 0;
+  std::vector<T> data;
 
-  Array3() {
-    sx = 0;
-    sy = 0;
-    sz = 0;
-    size = 0;
-  }
+  Array3() {}
 
-  Array3(int sx_, int sy_, int sz_)
-      : sx(sx_), sy(sy_), sz(sz_), size(0), data(0) {
+  Array3(int sx_, int sy_, int sz_) : sx(sx_), sy(sy_), sz(sz_), size(0) {
     init();
-  }
-
-  ~Array3() {
-    delete[] data;
-    data = 0;
-    sx = 0;
-    sy = 0;
-    sz = 0;
-    size = 0;
   }
 
   void init() {
     size = sx * sy * sz;
-    data = new T[size];
+    data = std::vector<T>(size);
     clear();
   }
 
@@ -50,16 +43,12 @@ template <class T> struct Array3 {
     sx = sx_;
     sy = sy_;
     sz = sz_;
-    size = sx * sy * sz;
-    data = new T[size];
-    clear();
+    init();
   }
 
-  void set(T val) {
-    for (int i = 0; i < size; i++) {
-      data[i] = val;
-    }
-  }
+  void clear() { set(static_cast<T>(0)); }
+
+  void set(T val) { std::fill(data.begin(), data.end(), val); }
 
   // returns largest absolute value in the array
   T infnorm() const {
@@ -71,33 +60,9 @@ template <class T> struct Array3 {
     return n;
   }
 
-  double dot(Array3 &other) {
-    double d = 0;
-    for (int i = 0; i < size; i++)
-      d += data[i] * other.data[i];
-    return d;
-  }
-
-  void inc(double s, Array3 &other) {
-    for (int i = 0; i < size; i++) {
-      data[i] += s * other.data[i];
-    }
-  }
-
-  void scale(float s) {
-    for (int i = 0; i < size; i++) {
-      data[i] *= s;
-    }
-  }
-
-  void scale_inc(double s, Array3 &other) {
-    for (int i = 0; i < size; i++) {
-      data[i] = s * data[i] + other.data[i];
-    }
-  }
-
-  void copy_to(Array3 &other) const {
-    std::memcpy(other.data, data, other.size * sizeof(T));
+  void copy_to(Array3 &rhs) const {
+    assert(size == rhs.size);
+    rhs.data.assign(data.begin(), data.end());
   }
 
   // index (i,j,k cell index), coords (0-1f uv coords)
@@ -120,7 +85,46 @@ template <class T> struct Array3 {
                (*this)(index.x + 1, index.y + 1, index.z + 1);
   }
 
-  glm::vec3 gradlerp(glm::ivec3 index, glm::vec3 coords) {
+  // either forward or backard difference depending on velocity direction
+  glm::vec3 upwind_gradient(int i, int j, int k, float h, glm::vec3 v) {
+    glm::vec3 grad(0.0f, 0.0f, 0.0f);
+    float c = (*this)(i, j, k);
+    // x
+    if (v.x >= 0) {
+      grad.x = ((*this)(i + 1, j, k) - c);
+    } else {
+      grad.x = (c - (*this)(i - 1, j, k));
+    }
+    // y
+    if (v.y >= 0) {
+      grad.y = ((*this)(i, j + 1, k) - c);
+    } else {
+      grad.y = (c - (*this)(i, j - 1, k));
+    }
+    // x
+    if (v.z >= 0) {
+      grad.x = ((*this)(i, j, k + 1) - c);
+    } else {
+      grad.x = (c - (*this)(i, j, k - 1));
+    }
+
+    return grad / h;
+  }
+
+  // central difference gradient at a given grid node
+  glm::vec3 central_grad(int i, int j, int k, float h) {
+    float d_dx = ((*this)(i + 1, j, k) - (*this)(i - 1, j, k));
+    float d_dy = ((*this)(i, j + 1, k) - (*this)(i, j - 1, k));
+    float d_dz = ((*this)(i, j, k + 1) - (*this)(i, j, k - 1));
+
+    assert((not std::isnan(d_dx)) and (not std::isnan(d_dy)) and
+           (not std::isnan(d_dz)));
+
+    return glm::vec3(d_dx, d_dy, d_dz) / (2.0f * h);
+  }
+
+  // interpolated forward difference gradient at a position in space
+  glm::vec3 gradlerp(glm::ivec3 index, glm::vec3 coords, float h) {
     int i = index.x;
     int j = index.y;
     int k = index.z;
@@ -152,17 +156,115 @@ template <class T> struct Array3 {
     T ddz11 = (v111 - v110);
     T dv_dz = bilerp(ddz00, ddz10, ddz01, ddz11, coords.x, coords.y);
 
-    return glm::vec3(dv_dx, dv_dy, dv_dz);
+    return glm::vec3(dv_dx, dv_dy, dv_dz) / h;
   }
 
-  void clear() { std::memset(data, 0, size * sizeof(T)); }
+  void print() {
+    for (int k = 0; k < sz; k++) {
+      std::printf("z = %i\n", k);
+      for (int j = 0; j < sy; j++) {
+        for (int i = 0; i < sx; i++) {
+          std::cout << (*this)(i, j, k) << "  ";
+        }
+        std::cout << "\n\n";
+      }
+    }
+  }
 
   T &operator()(int i, int j, int k) {
+    assert(i >= 0 and i <= sx);
+    assert(j >= 0 and j <= sy);
+    assert(k >= 0 and k <= sz);
     return data[i + (sx * j) + (sx * sy * k)];
   }
 
-  T &operator()(glm::ivec3 index) {
-    return data[index.x + (sx * index.y) + (sx * sy * index.z)];
+  T &operator()(glm::ivec3 index) { return (*this)(index.x, index.y, index.z); }
+
+  // copy constructor
+  Array3<T>(const Array3<T> &rhs) {
+    // require they be of the same size if already initialized
+    assert(size == rhs.size);
+
+    for (int i = 0; i < size; i++) {
+      data[i] = rhs.data[i];
+    }
+  }
+
+  // ARRAY3<T> OPERATORS
+
+  Array3<T> operator+(const Array3<T> &rhs) {
+    assert(size == rhs.size);
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] + rhs.data[i];
+    }
+    return n;
+  }
+  Array3<T> operator-(const Array3<T> &rhs) {
+    assert(size == rhs.size);
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] - rhs.data[i];
+    }
+    return n;
+  }
+
+  // component-wise multiplication
+  Array3<T> operator*(const Array3<T> &rhs) {
+    assert(size == rhs.size);
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] * rhs.data[i];
+    }
+    return n;
+  }
+
+    Array3<T> operator/(const Array3<T> &rhs) {
+    assert(size == rhs.size);
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] /rhs.data[i];
+    }
+    return n;
+  }
+  // T OPERATORS
+  Array3<T> operator+(const T rhs) {
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] + rhs;
+    }
+    return n;
+  }
+
+  Array3<T> operator-(const T rhs) {
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] - rhs;
+    }
+    return n;
+  }
+  Array3<T> operator*(const T rhs) {
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] * rhs;
+    }
+    return n;
+  }
+
+    Array3<T> operator/(const T rhs) {
+    Array3<T> n;
+    n.init(sx, sy, sz);
+    for (int i = 0; i < size; i++) {
+      n.data[i] = data[i] / rhs;
+    }
+    return n;
   }
 };
 

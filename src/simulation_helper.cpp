@@ -7,14 +7,14 @@ void Simulation::add_sphere_phi() {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) =
-            (glm::distance(center, position) / lx) * 2.0f - 0.5f;
+        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.15f);
       }
     }
   }
 }
 
 void Simulation::intialize_boundaries() {
+  solid_phi.set(0.5f * h);
   for (int i = 0; i < solid_phi.sx; i++) {
     for (int k = 0; k < solid_phi.sy; k++) {
       solid_phi(i, solid_phi.sy - 1, k) = -0.5f * h;
@@ -35,6 +35,8 @@ void Simulation::intialize_boundaries() {
       solid_phi(i, j, 0) = -0.5f * h;
     }
   }
+  // TODO reinit solid phi?
+  // reinitialize_phi(solid_phi);
 }
 
 // given a position, return the trilinear interpolation

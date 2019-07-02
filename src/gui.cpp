@@ -24,9 +24,9 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   // add fluid-containing grid cells
   grid_offsets.resize(simulation.liquid_phi.size);
   int fcc = 0;
-  for (int i = 1; i < simulation.liquid_phi.sx - 1; i++) {
-    for (int j = 1; j < simulation.liquid_phi.sy - 1; j++) {
-      for (int k = 1; k < simulation.liquid_phi.sz - 1; k++) {
+  for (int i = 0; i < simulation.liquid_phi.sx; i++) {
+    for (int j = 0; j < simulation.liquid_phi.sy; j++) {
+      for (int k = 0; k < simulation.liquid_phi.sz; k++) {
         if (simulation.liquid_phi(i, j, k) < 0) {
           grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 1.0f);
         } else {
@@ -111,9 +111,9 @@ void GUI::update(float t, bool force) {
     // update grid vao
     float h = simulation.h;
     int fcc = 0;
-    for (int i = 1; i < simulation.liquid_phi.sx - 1; i++) {
-      for (int j = 1; j < simulation.liquid_phi.sy - 1; j++) {
-        for (int k = 1; k < simulation.liquid_phi.sz - 1; k++) {
+    for (int i = 0; i < simulation.liquid_phi.sx; i++) {
+      for (int j = 0; j < simulation.liquid_phi.sy; j++) {
+        for (int k = 0; k < simulation.liquid_phi.sz; k++) {
           grid_offsets[fcc] =
               glm::vec4(h * i, h * j, h * k, simulation.liquid_phi(i, j, k));
           fcc++;

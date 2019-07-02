@@ -5,6 +5,8 @@
 #include <getopt.h>
 #include <iostream>
 
+void test_array3();
+
 // ERROR CALLBACK
 void glfw_error_callback(int error, const char *description) {
   fprintf(stderr, "Error %i: %s\n", error, description);
@@ -42,6 +44,8 @@ void MousePosCallback(GLFWwindow *window, double mouse_x, double mouse_y) {
 }
 
 int main(int argc, char *argv[]) {
+  // test_array3();
+
   // create window/init glfw
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit())
@@ -70,4 +74,48 @@ int main(int argc, char *argv[]) {
     glfwSwapBuffers(window);
     glfwPollEvents();
   }
+}
+
+void test() { test_array3(); }
+
+void test_array3() {
+  std::cout << "TESTING ARRAY3 FUNCTIONS/OPERATORS\n";
+  Array3f f(2, 2, 2);
+  f.set(2);
+  f.print();
+
+  // assignment
+  Array3f mis(2, 2, 2);
+  mis.set(3);
+  f = mis;
+  f.print();
+
+  // addition
+  f.set(2);
+  f = f + mis;
+  // we should get an array of all 5
+  f.print();
+
+  f = f - 1.5;
+  // we should get an array of all 3.5
+  f.print();
+
+  mis.set(2);
+  f = f * mis;
+  // array of all 7
+  f.print();
+
+  mis.set(0.5);
+  f = f - mis;
+  // array of 6.5
+  f.print();
+
+  mis.set(3);
+  // 6.5 - (.5 * 2) = 5.5
+  f = f - (mis - 1) * 0.5;
+  f.print();
+
+  // 11
+  f = f * 2;
+  f.print();
 }

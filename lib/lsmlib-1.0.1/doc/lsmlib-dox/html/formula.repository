@@ -1,0 +1,42 @@
+\form#0:\[ \phi(s) = \phi(s_b) + sgn(\phi) |d\phi/dn (s_b)| (s - s_b) \]
+\form#1:$ s $
+\form#2:$ s_b $
+\form#3:\[ S_t = -sgn(\phi) \vec{N} \cdot \nabla S \]
+\form#4:$ \nabla S $
+\form#5:$ \nabla \phi $
+\form#6:$ | \nabla \phi | $
+\form#7:\[ sgn(\phi) = \phi / \sqrt{ \phi^2 + |\nabla \phi|^2 * dx^2 } \]
+\form#8:$ \phi < 0 $
+\form#9:$ \phi > 0 $
+\form#10:\[ norm = \sqrt{ |\nabla \phi|^2 + dx^2 } \]
+\form#11:\[ norm = \sqrt{ |\nabla \phi|^2 + dx^2} \]
+\form#12:$ \phi $
+\form#13:$ \psi $
+\form#14:$ \{ \phi=0,\psi=0 \} $
+\form#15:\[ \phi_t = ... \]
+\form#16:\[ \phi_t = -\vec{V} \cdot \nabla \phi + ... \]
+\form#17:\[ \phi_t = -V_n |\nabla \phi| + ... \]
+\form#18:$ \nabla \phi$
+\form#19:$ V_n $
+\form#20:\[ \phi_t = -b kappa |\nabla \phi| + ... \]
+\form#21:$ kappa $
+\form#22:$ b $
+\form#23:\[ \phi_t = (- V - V_n \nabla \phi/|\nabla \phi|) . \nabla \phi i.e. \phi_t = - V . \nabla \phi - V_n |\nabla \phi| \]
+\form#24:$ sgn(\phi) |\nabla \phi| $
+\form#25:$ \phi_0 $
+\form#26:$ sgn(\phi) $
+\form#27:\[ \phi_t + \nabla \phi \cdot \left ({ \frac{sgn(\psi)}{|\nabla \psi|} \nabla \psi }\right) = 0 \]
+\form#28:$ \nabla \psi $
+\form#29:\[ \left( \frac{\partial \phi}{\partial x} \right)_i \approx \frac{ \phi_{i+1} - \phi_{i-1} }{ 2 dx } \]
+\form#30:\[ \left( \frac{\partial \phi}{\partial x} \right)_i \approx \frac{ -\phi_{i+2} + 8 \phi_{i+1} - 8 \phi_{i-1} + \phi_{i-2} } { 12 dx } \]
+\form#31:\[ \nabla^2 \phi \approx \frac{ \phi_{i+1} - 2 \phi_{i} + \phi_{i-1} } { dx^2 } \]
+\form#32:$ phi $
+\form#33:$ \nabla F $
+\form#34:\[ \nabla \phi = (\nabla \phi_{plus} + \nabla \phi_{minus}) / 2 \]
+\form#35:\[ \nabla^2 \phi \approx \frac{ \phi_{i+1,j,k} - 2 \phi_{i,j,k} + \phi_{i-1,j,k} } { dx^2 } + \frac{ \phi_{i,j+1,k} - 2 \phi_{i,j,k} + \phi_{i,j-1,k} } { dy^2 } \]
+\form#36:\[ \nabla^2 \phi \approx \frac{ \phi_{i+1,j,k} - 2 \phi_{i,j,k} + \phi_{i-1,j,k} } { dx^2 } + \frac{ \phi_{i,j+1,k} - 2 \phi_{i,j,k} + \phi_{i,j-1,k} } { dy^2 } + \frac{ \phi_{i,j,k+1} - 2 \phi_{i,j,k} + \phi_{i,j,k-1} } { dz^2 } \]
+\form#37:$ \phi = 0 $
+\form#38:\[ \phi_t + sgn(\psi) * ( \nabla \psi / |\nabla \psi| ) \cdot \nabla \phi = 0 \]
+\form#39:\[ \psi_t + sgn(\phi) * ( \nabla \phi / |\nabla \phi| ) \cdot \nabla \psi = 0 \]
+\form#40:\[ \phi_t + sgn(\phi) ( |\nabla \phi| - 1 ) = 0 \]
+\form#41:\[ \left( \frac{\partial \phi}{\partial x} \right)_i \approx \frac{ -\phi_{i+2} + 8 \phi_{i+1} - 8 \phi_{i-1} + \phi_{i+2} } { 12 dx } \]

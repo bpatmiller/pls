@@ -7,15 +7,17 @@ public:
   glm::vec3 position;
   glm::vec3 velocity;
   int id = 1;
-  float mass = 1.0f;
+  float phi;
+  bool valid;
 
   Particle(glm::vec3 p) {
     position = p;
     velocity = glm::vec3(0, 0, 0);
   }
 
-  Particle(glm::vec3 p, glm::vec3 v) {
+  Particle(glm::vec3 p, float ph) {
     position = p;
-    velocity = v;
+    phi = ph;
+    valid = true;
   }
 };
