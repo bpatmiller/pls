@@ -5,19 +5,15 @@
 class Particle {
 public:
   glm::vec3 position;
-  glm::vec3 velocity;
-  int id = 1;
-  float phi;
+  int id;
+  float starting_phi;
+  float radius;
   bool valid;
 
-  Particle(glm::vec3 p) {
+  Particle(glm::vec3 p, float phi, float rad) {
     position = p;
-    velocity = glm::vec3(0, 0, 0);
-  }
-
-  Particle(glm::vec3 p, float ph) {
-    position = p;
-    phi = ph;
+    starting_phi = phi;
+    radius = rad;
     valid = true;
   }
 };

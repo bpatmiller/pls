@@ -11,83 +11,149 @@ float Simulation::CFL() {
   return h / max_v;
 }
 
-// check all grid cells with |phi|<3h, seed 64 particles in each
+float Simulation::trilerp_scalar_field(Array3f &field, glm::vec3 position) {
+  glm::vec3 coords;
+  glm::ivec3 index;
+  position_to_grid(position, glm::vec3(0), index, coords);
+  return field.trilerp(index, coords);
+}
+
+// check all eight corners of a grid cell for a small phi value
+bool Simulation::check_corners(int i, int j, int k) {
+  for (int x = 0; x <= 1; x++) {
+    for (int y = 0; y <= 1; y++) {
+      for (int z = 0; z <= 1; z++) {
+        float phi_val = liquid_phi(i + x, j + y, k + z);
+        if (std::abs(phi_val) < 3.0f * h)
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
 void Simulation::reseed_particles() {
-  // set the valid flag if particles are close to the interface
+  if (reseed_counter % 10 == 0) {
+    reseed_counter = 1;
+    remove_particles();
+    initialize_particles();
+    std::cout << "reseeding particles\n";
+  }
+  reseed_counter++;
+}
+
+void Simulation::initialize_particles() {
+  int particles_added = 0;
+  // count how many particles are in each cell
+  particle_count.clear();
   for (auto &p : particles) {
     glm::vec3 coords;
     glm::ivec3 index;
-    position_to_grid(p.position, CENTER_OFFSET, index, coords);
-    float phi_val = liquid_phi.trilerp(index, coords);
-    if (std::abs(phi_val) < 3.0f * h) {
-      p.valid = true;
-    } else {
-      p.valid = false;
-      particle_count(index.x, index.y, index.z) -= 1;
-    }
+    position_to_grid(p.position, glm::vec3(0), index, coords);
+    particle_count(index) += 1;
   }
-  // delete particles that are far away from the interface
-  particles.erase(std::remove_if(particles.begin(), particles.end(),
-                                 [](Particle const &p) { return !p.valid; }),
-                  particles.end());
 
-  // make sure each grid cell near the interface has 64 particles
-  for (int i = 0; i < liquid_phi.sx; i++) {
-    for (int j = 0; j < liquid_phi.sy; j++) {
-      for (int k = 0; k < liquid_phi.sz; k++) {
-        if (std::abs(liquid_phi(i, j, k)) < 3.0f * h) {
-          // reseed
-          for (int n = particle_count(i, j, k); n < 64; n++) {
-            float jitterx = glm::linearRand(0.0f, 1.0f);
-            float jittery = glm::linearRand(0.0f, 1.0f);
-            float jitterz = glm::linearRand(0.0f, 1.0f);
+  // "top off" remaining cells with small phi values
+  for (int i = 1; i < liquid_phi.sx - 1; i++) {
+    for (int j = 1; j < liquid_phi.sy - 1; j++) {
+      for (int k = 1; k < liquid_phi.sz - 1; k++) {
+        if (check_corners(i, j, k)) {
+          glm::vec3 base_position((i + 0.5f) * h, (j + 0.5f) * h,
+                                  (k + 0.5f) * h);
+          for (int count = particle_count(i, j, k); count < 16; count++) {
             glm::vec3 position =
-                glm::vec3((float)i + jitterx, (float)j + jittery,
-                          (float)k + jitterz) *
-                h;
-            Particle p(position, liquid_phi.trilerp(
-                                     glm::ivec3(i, j, k),
-                                     glm::vec3(jitterx, jittery, jitterz)));
+                base_position + glm::linearRand(glm::vec3(0.0f), glm::vec3(h));
+            float phi_val = trilerp_scalar_field(liquid_phi, position);
+            // add particle with position, starting phi, and radius
+            Particle p(position, phi_val,
+                       glm::clamp(std::abs(phi_val), 0.1f * h, 0.5f * h));
             particles.push_back(p);
             particle_count(i, j, k) += 1;
+            particles_added++;
           }
         }
       }
     }
   }
+  std::printf("added %i particles\n", particles_added);
 }
 
-void Simulation::compute_derivatives() {
-  // compute foward, backward, and central difference derivatives of phi
-  for (int i = 0; i < liquid_phi.sx; i++) {
-    for (int j = 0; j < liquid_phi.sy; j++) {
-      for (int k = 0; k < liquid_phi.sz; k++) {
-        // dx forward, backward, center
-        if (i < liquid_phi.sx - 1)
-          DX(i, j, k).x = (liquid_phi(i + 1, j, k) - liquid_phi(i, j, k)) / h;
-        if (i > 0)
-          DX(i, j, k).y = (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k)) / h;
-        if (i < liquid_phi.sx - 1 and i > 0)
-          DX(i, j, k).z =
-              (liquid_phi(i + 1, j, k) - liquid_phi(i - 1, j, k)) / (2.0f * h);
-        // dy forward, backward, center
-        if (j < liquid_phi.sy - 1)
-          DY(i, j, k).x = (liquid_phi(i, j + 1, k) - liquid_phi(i, j, k)) / h;
-        if (j > 0)
-          DY(i, j, k).y = (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k)) / h;
-        if (j < liquid_phi.sy - 1 and j > 0)
-          DY(i, j, k).z =
-              (liquid_phi(i, j + 1, k) - liquid_phi(i, j - 1, k)) / (2.0f * h);
-        // dz forward, backward, center
-        if (k < liquid_phi.sz - 1)
-          DZ(i, j, k).x = (liquid_phi(i, j, k + 1) - liquid_phi(i, j, k)) / h;
-        if (k > 0)
-          DZ(i, j, k).y = (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1)) / h;
-        if (k < liquid_phi.sz - 1 and k > 0)
-          DZ(i, j, k).z =
-              (liquid_phi(i, j, k + 1) - liquid_phi(i, j, k - 1)) / (2.0f * h);
+// remove all extraneous particles
+void Simulation::remove_particles() {
+  int old_size = particles.size();
+  // mark all distant particles to be deleted
+  for (auto &p : particles) {
+    float phi_val = trilerp_scalar_field(liquid_phi, p.position);
+    p.valid = (std::abs(phi_val) < 3.0f * h);
+  }
+  // remove from particle vector
+  particles.erase(std::remove_if(particles.begin(), particles.end(),
+                                 [](Particle const &p) { return !p.valid; }),
+                  particles.end());
+
+  std::printf("removed %i particles\n", old_size - (int)particles.size());
+  std::printf("particle.size()=%i\n", (int)particles.size());
+}
+
+void Simulation::correct_levelset() {
+  // FIXME check equals operator
+  liquid_phi_minus = liquid_phi;
+  liquid_phi_plus = liquid_phi;
+  for (auto &p : particles) {
+    // determine if the particle is escaped
+    float local_phi_val = trilerp_scalar_field(liquid_phi, p.position);
+    if (p.starting_phi * local_phi_val < 0 && local_phi_val > p.radius) {
+      // compute the phi_p at all eight grid points
+      glm::ivec3 index;
+      glm::vec3 coords;
+      position_to_grid(p.position, glm::vec3(0), index, coords);
+      float sign_p = (p.starting_phi > 0) ? 1.0f : -1.0f;
+      // compare phi_p to each neighboring grid node
+      for (int i = 0; i <= 1; i++) {
+        for (int j = 0; j <= 1; j++) {
+          for (int k = 0; k <= 1; k++) {
+            glm::vec3 grid_position((index.x + i + 0.5f) * h,
+                                    (index.y + j + 0.5f) * h,
+                                    (index.z + k + 0.5f) * h);
+            // equation 10 in PLS
+            float phi_p =
+                sign_p * (p.radius - glm::distance(grid_position, p.position));
+            // rebuild phi_+
+            if (sign_p > 0) {
+              liquid_phi_plus(index.x + i, index.y + j, index.z + k) =
+                  std::max(phi_p, liquid_phi_plus(index.x + i, index.y + j,
+                                                  index.z + k));
+            }
+            // rebuild phi_-
+            else {
+              liquid_phi_plus(index.x + i, index.y + j, index.z + k) =
+                  std::min(phi_p, liquid_phi_plus(index.x + i, index.y + j,
+                                                  index.z + k));
+            }
+          }
+        }
       }
     }
+  }
+
+  // merge phi_+ and phi_-
+  // equation 13 in PLS
+  for (int i = 0; i < liquid_phi.size; i++) {
+    if (std::abs(liquid_phi_plus.data[i]) >
+        std::abs(liquid_phi_minus.data[i])) {
+      liquid_phi.data[i] = liquid_phi_minus.data[i];
+    } else {
+      liquid_phi.data[i] = liquid_phi_plus.data[i];
+    }
+  }
+}
+
+// adjust particle radii and reset particle phi values
+void Simulation::adjust_particle_radii() {
+  for (auto &p : particles) {
+    float local_phi_val = trilerp_scalar_field(liquid_phi, p.position);
+    p.starting_phi = local_phi_val;
+    p.radius = glm::clamp(std::abs(local_phi_val), 0.1f * h, 0.5f * h);
   }
 }
 
@@ -173,7 +239,7 @@ void Simulation::reinitialize_phi() {
     // std::cout << "err:" << err << "\n";
 
     if (err < tol) {
-      std::cout << "phi succesfully reinitialized\n";
+      // std::cout << "phi succesfully reinitialized\n";
       break;
     }
   }
@@ -186,9 +252,9 @@ void Simulation::advect_particles(float dt) {
     // bounds checking
     glm::vec3 coords;
     glm::ivec3 index;
-    position_to_grid(p.position, CENTER_OFFSET, index, coords);
+    position_to_grid(p.position, glm::vec3(0), index, coords);
     float solid_phi_val = solid_phi.trilerp(index, coords);
-    if (false && solid_phi_val < 0) {
+    if (solid_phi_val < 0) {
       glm::vec3 grad = solid_phi.gradlerp(index, coords, h);
       if (glm::length(grad) > 0) {
         grad = glm::normalize(grad);
@@ -309,16 +375,20 @@ void Simulation::advance(float dt) {
   float t = 0.0f;
   float substep;
   while (t < dt) {
-    substep = CFL();
+    substep = 0.5f * CFL();
     if (t + substep >= dt) {
       substep = dt - t;
     }
     t += substep;
-    // perform each simulation step
-    // reseed_particles();
-    reinitialize_phi();
+    // particle level set method
+    reseed_particles();
     advect_particles(substep);
     advect_phi(substep);
+    correct_levelset();
+    reinitialize_phi();
+    correct_levelset();
+    adjust_particle_radii();
+
     advect_velocity(substep);
     add_gravity(substep);
     enforce_boundaries();
@@ -326,6 +396,5 @@ void Simulation::advance(float dt) {
     // extrapolate(u, u_valid);
     // extrapolate(v, v_valid);
     // extrapolate(w, w_valid);
-    // enforce_boundaries();
   }
 }

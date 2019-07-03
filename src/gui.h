@@ -15,6 +15,7 @@ public:
   void init(float lx_, int nx_, int ny_, int nz_);
   void update(float t = -1, bool force = false);
   void update_camera();
+  void create_sphere(float Radius, std::vector<glm::vec3> &s_vertices);
 
   // simulation data
   Simulation simulation;
@@ -48,4 +49,8 @@ public:
   VAO grid_vao;
   std::vector<glm::uvec3> box_indices;
   std::vector<glm::vec4> grid_offsets;
+  // marker particle visualization
+  Program particle_program;
+  VAO particle_vao;
+  std::vector<glm::uvec3> sphere_indices;
 };

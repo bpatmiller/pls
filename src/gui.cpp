@@ -10,6 +10,16 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
 
   // compile shaders
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");
+  particle_program =
+      Program("src/shaders/particle.vs", "", "src/shaders/particle.fs", "");
+
+  // set up particle vao
+  std::vector<glm::vec3> sphere_vertices;
+  create_sphere(simulation.h * 0.1, sphere_vertices);
+  particle_vao.setLayout({3}, false);
+  particle_vao.setLayout({3, 1, 1, 1, 1}, true);
+  particle_vao.vb.set(sphere_vertices);
+  particle_vao.ib.set(simulation.particles);
 
   std::vector<glm::vec3> box_vertices = {
       {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f},
@@ -123,6 +133,7 @@ void GUI::update(float t, bool force) {
     grid_vao.ib.update(grid_offsets, 0);
   }
 
+  // draw grid
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   grid_program.use();
   grid_program.setMat4("projection", projection_matrix);
@@ -130,4 +141,40 @@ void GUI::update(float t, bool force) {
   grid_vao.bind();
   glDrawElementsInstanced(GL_TRIANGLES, box_indices.size() * 3, GL_UNSIGNED_INT,
                           box_indices.data(), grid_offsets.size());
+
+  particle_vao.setLayout({3, 1, 1, 1, 1}, true);
+  particle_vao.ib.set(simulation.particles);
+  // draw particle
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  particle_program.use();
+  particle_program.setMat4("projection", projection_matrix);
+  particle_program.setMat4("view", view_matrix);
+  particle_vao.bind();
+  glDrawElementsInstanced(GL_TRIANGLES, sphere_indices.size() * 3,
+                          GL_UNSIGNED_INT, sphere_indices.data(),
+                          simulation.particles.size());
+}
+
+void GUI::create_sphere(float Radius, std::vector<glm::vec3> &s_vertices) {
+  int Stacks = 4;
+  int Slices = 4;
+  s_vertices.clear();
+
+  for (int i = 0; i <= Stacks; ++i) {
+    float V = i / (float)Stacks;
+    float phi = V * glm::pi<float>();
+    for (int j = 0; j <= Slices; ++j) {
+      float U = j / (float)Slices;
+      float theta = U * (glm::pi<float>() * 2);
+      float x = cosf(theta) * sinf(phi);
+      float y = cosf(phi);
+      float z = sinf(theta) * sinf(phi);
+      s_vertices.push_back(glm::vec3(x, y, z) * Radius);
+    }
+  }
+
+  for (int i = 0; i < Slices * Stacks + Slices; ++i) {
+    sphere_indices.emplace_back(glm::uvec3(i, i + Slices + 1, i + Slices));
+    sphere_indices.emplace_back(glm::uvec3(i + Slices + 1, i, i + 1));
+  }
 }

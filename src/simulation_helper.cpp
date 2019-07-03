@@ -12,6 +12,44 @@ void Simulation::add_sphere_phi() {
     }
   }
 }
+// inigo quile'z capsule distance function
+static inline float sdCapsule(glm::vec3 p, glm::vec3 a, glm::vec3 b, float r) {
+  glm::vec3 pa = p - a, ba = b - a;
+  float h = glm::clamp(glm::dot(pa, ba) / glm::dot(ba, ba), 0.0f, 1.0f);
+  return glm::length(pa - ba * h) - r;
+}
+
+void Simulation::add_cylinder_phi() {
+  glm::vec3 a(h * (nx * 0.35f + 0.5f), h * (nx * 0.5f + 0.5f),
+              h * (nz * 0.5f + 0.5f));
+  glm::vec3 b(h * (nx * 0.65f + 0.5f), h * (nx * 0.5f + 0.5f),
+              h * (nz * 0.5f + 0.5f));
+  float r = lx * 0.1f;
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
+        liquid_phi(i, j, k) = sdCapsule(position, a, b, r);
+      }
+    }
+  }
+}
+
+void Simulation::set_vortex_field() {
+  v.set(0);
+  glm::vec2 center(lx * 0.5f, ly * 0.5f);
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        glm::vec2 position((i + 0.5f) * h, (k + 0.5f) * h);
+        float x = position.x - center.x;
+        float y = position.y - center.y;
+        u(i, j, k) = -y / (x * x + y * y);
+        w(i, j, k) = x / (x * x + y * y);
+      }
+    }
+  }
+}
 
 void Simulation::intialize_boundaries() {
   solid_phi.set(0.5f * h);
