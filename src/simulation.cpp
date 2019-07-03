@@ -409,7 +409,7 @@ void Simulation::solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
   if (solid_phi(i1, j1, k1) > 0) {
     aii += 1;
     if (liquid_phi(i1, j1, k1) <= 0) {
-      double scale = dt / (density * h * h);
+      double scale = dt / (density_1 * h * h);
       tl.push_back(Eigen::Triplet<double>(fluid_index(i, j, k),
                                           fluid_index(i1, j1, k1), -scale));
     }
@@ -441,7 +441,7 @@ void Simulation::solve_pressure(float dt) {
         if (liquid_phi(i, j, k) <= 0) {
           int index = fluid_index(i, j, k);
           double aii = 0; // negative sum of nonsolid nbrs
-          double scale = dt / (density * h * h);
+          double scale = dt / (density_1 * h * h);
           solve_pressure_helper(tripletList, aii, dt, i, j, k, i + 1, j, k);
           solve_pressure_helper(tripletList, aii, dt, i, j, k, i - 1, j, k);
           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j + 1, k);
@@ -503,19 +503,19 @@ void Simulation::apply_pressure_gradient(float dt) {
         // note: density is sampled at grid faces
         if ((solid_phi(i, j, k) > 0 && solid_phi(i - 1, j, k) > 0) &&
             (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          u(i, j, k) -= (dt / (density * h)) *
+          u(i, j, k) -= (dt / (density_1 * h)) *
                         (pressure(i, j, k) - pressure(i - 1, j, k));
         }
 
         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j - 1, k) > 0) &&
             (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          v(i, j, k) -= (dt / (density * h)) *
+          v(i, j, k) -= (dt / (density_1 * h)) *
                         (pressure(i, j, k) - pressure(i, j - 1, k));
         }
 
         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j, k - 1) > 0) &&
             (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          w(i, j, k) -= (dt / (density * h)) *
+          w(i, j, k) -= (dt / (density_1 * h)) *
                         (pressure(i, j, k) - pressure(i, j, k - 1));
         }
       }
