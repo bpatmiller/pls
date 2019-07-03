@@ -24,7 +24,8 @@ public:
   int nx, ny, nz;   // grid resolution
   float lx, ly, lz; // container width
   float h;          // cell width
-  float density = 8.0f;
+  float density_1 = 1.0f;
+  float density_2 = 2.0f;
   // phi data
   Array3f solid_phi, liquid_phi, phi_copy; // solid and fluid signed distances
   Array3f sig, norm_grad; // sigmoid smoothing function and norm of gradient
@@ -35,15 +36,16 @@ public:
   Array3f u_weight, v_weight, w_weight;
   bool predefined_field = false;
   // pressure data
-  Array3f pressure;
-  Array3f divergence;
-  Eigen::SparseMatrix<double> A;
-  Eigen::VectorXd x, b;
+  Array3d pressure;
+  Array3d divergence;
   Array3i fluid_index;
   // particle data
   std::vector<Particle> particles;
   Array3i particle_count;
   int reseed_counter;
+
+  Eigen::SparseMatrix<double> A;
+  Eigen::VectorXd x, b;
 
   Simulation(){};
 
@@ -113,6 +115,7 @@ public:
   void position_to_grid(glm::vec3 p, glm::vec3 offset, glm::ivec3 &index,
                         glm::vec3 &coords);
   glm::vec3 trilerp_uvw(glm::vec3 p);
+  glm::vec3 trilerp_tutvtw(glm::vec3 p);
   bool check_corners(int i, int j, int k);
   void reseed_particles();
   void initialize_particles();
@@ -123,4 +126,11 @@ public:
 
   // auxillary level set methods
   void norm_gradient();
+  // velocity extension
+  void extend_velocity();
+  void sweep_velocity();
+  void sweep_velocity_boundary(Array3f &arr);
+  void sweep_u(int i0, int i1, int j0, int j1, int k0, int k1);
+  void sweep_v(int i0, int i1, int j0, int j1, int k0, int k1);
+  void sweep_w(int i0, int i1, int j0, int j1, int k0, int k1);
 };

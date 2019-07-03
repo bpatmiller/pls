@@ -24,7 +24,7 @@ bool Simulation::check_corners(int i, int j, int k) {
     for (int y = 0; y <= 1; y++) {
       for (int z = 0; z <= 1; z++) {
         float phi_val = liquid_phi(i + x, j + y, k + z);
-        if (std::abs(phi_val) < 3.0f * h)
+        if (std::abs(phi_val) < 2.0f * h)
           return true;
       }
     }
@@ -33,7 +33,7 @@ bool Simulation::check_corners(int i, int j, int k) {
 }
 
 void Simulation::reseed_particles() {
-  if (reseed_counter % 10 == 0) {
+  if (reseed_counter % 5 == 0) {
     reseed_counter = 1;
     remove_particles();
     initialize_particles();
@@ -54,19 +54,31 @@ void Simulation::initialize_particles() {
   }
 
   // "top off" remaining cells with small phi values
-  for (int i = 1; i < liquid_phi.sx - 1; i++) {
-    for (int j = 1; j < liquid_phi.sy - 1; j++) {
-      for (int k = 1; k < liquid_phi.sz - 1; k++) {
+  for (int i = 1; i < liquid_phi.sx - 2; i++) {
+    for (int j = 1; j < liquid_phi.sy - 2; j++) {
+      for (int k = 1; k < liquid_phi.sz - 2; k++) {
         if (check_corners(i, j, k)) {
           glm::vec3 base_position((i + 0.5f) * h, (j + 0.5f) * h,
                                   (k + 0.5f) * h);
           for (int count = particle_count(i, j, k); count < 64; count++) {
             glm::vec3 position =
                 base_position + glm::linearRand(glm::vec3(0.0f), glm::vec3(h));
-            float phi_val = trilerp_scalar_field(liquid_phi, position);
+            // attraction step
+            float initial_phi_val = trilerp_scalar_field(liquid_phi, position);
+            float phi_goal =
+                (initial_phi_val > 0)
+                    ? glm::clamp(initial_phi_val, 0.1f * h, 2.0f * h)
+                    : glm::clamp(initial_phi_val, -2.0f * h, -0.1f * h);
+            glm::vec3 normal = glm::normalize(liquid_phi.gradlerp(
+                glm::ivec3(i, j, k), (position - base_position) / h, h));
+            glm::vec3 new_position =
+                glm::clamp(position + (phi_goal - initial_phi_val) * normal,
+                           1.0001f * h, (nx - 1.0001f) * h);
+            float new_phi_val = trilerp_scalar_field(liquid_phi, new_position);
+
             // add particle with position, starting phi, and radius
-            Particle p(position, phi_val,
-                       glm::clamp(std::abs(phi_val), 0.1f * h, 0.5f * h));
+            Particle p(new_position, new_phi_val,
+                       glm::clamp(std::abs(new_phi_val), 0.1f * h, 0.5f * h));
             particles.push_back(p);
             particle_count(i, j, k) += 1;
             particles_added++;
@@ -213,14 +225,13 @@ void Simulation::norm_gradient() {
 
 void Simulation::reinitialize_phi() {
   // compute sigmoid function for phi_0
-  sig = liquid_phi / (liquid_phi * liquid_phi +
-                      h * h); // yes this component-wise math is allowed
+  sig = liquid_phi / (liquid_phi * liquid_phi + h * h);
   norm_gradient();
 
   float err = 0;
-  float tol = 1e-2;
-  int max_iter = 2000;
-  float dt = 0.1f * h;
+  float tol = 1e-1f;
+  int max_iter = 1000;
+  float dt = 1e-1f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
       throw std::runtime_error("error: phi reinitialization did not converge");
@@ -300,6 +311,8 @@ void Simulation::advect_phi(float dt) {
 
 // semi-lagrangian advection via backwards euler as in [Stam 1999]
 void Simulation::advect_velocity(float dt) {
+  if (predefined_field)
+    return;
   tu.clear();
   tv.clear();
   tw.clear();
@@ -345,7 +358,7 @@ void Simulation::advect_velocity(float dt) {
 // apply acceleration due to gravity
 void Simulation::add_gravity(float dt) {
   if (not predefined_field)
-    v -= 9.8 * dt;
+    v -= 9.8f * dt;
 }
 
 void Simulation::enforce_boundaries() {
@@ -369,6 +382,8 @@ void Simulation::enforce_boundaries() {
 
 // project the velocity field onto its divergence-free part
 void Simulation::project(float dt) {
+  if (predefined_field)
+    return;
   compute_divergence();
   solve_pressure(dt);
   apply_pressure_gradient(dt);
@@ -377,14 +392,12 @@ void Simulation::project(float dt) {
 // compute negative divergence to be used in rhs of pressure solve
 void Simulation::compute_divergence() {
   divergence.clear();
-  float coef = -1.0f / h;
   for (int i = 0; i < divergence.sx; i++) {
     for (int j = 0; j < divergence.sy; j++) {
       for (int k = 0; k < divergence.sz; k++) {
         if (liquid_phi(i, j, k) <= 0)
-          divergence(i, j, k) =
-              coef * (u(i + 1, j, k) - u(i, j, k) + v(i, j + 1, k) -
-                      v(i, j, k) + w(i, j, k + 1) - w(i, j, k));
+          divergence(i, j, k) = u(i + 1, j, k) - u(i, j, k) + v(i, j + 1, k) -
+                                v(i, j, k) + w(i, j, k + 1) - w(i, j, k);
       }
     }
   }
@@ -451,7 +464,7 @@ void Simulation::solve_pressure(float dt) {
     for (int j = 0; j < divergence.sy; j++) {
       for (int k = 0; k < divergence.sz; k++) {
         if (liquid_phi(i, j, k) <= 0) {
-          b(fluid_index(i, j, k)) = divergence(i, j, k);
+          b(fluid_index(i, j, k)) = (-1.0 / h) * divergence(i, j, k);
         }
       }
     }
@@ -480,24 +493,230 @@ void Simulation::solve_pressure(float dt) {
   }
 }
 
-// apply pressure update with ghost fluid method
+// apply pressure update
+// TODO use ghost fluid method
 // FIXME add variable densities
 void Simulation::apply_pressure_gradient(float dt) {
-  for (int i = 1; i < nx; i++) {
-    for (int j = 1; j < ny; j++) {
-      for (int k = 1; k < nz; k++) {
+  for (int i = 2; i < nx; i++) {
+    for (int j = 2; j < ny; j++) {
+      for (int k = 2; k < nz; k++) {
         // note: density is sampled at grid faces
-        if (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)
+        if ((solid_phi(i, j, k) > 0 && solid_phi(i - 1, j, k) > 0) &&
+            (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
           u(i, j, k) -= (dt / (density * h)) *
                         (pressure(i, j, k) - pressure(i - 1, j, k));
+        }
 
-        if (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)
+        if ((solid_phi(i, j, k) > 0 && solid_phi(i, j - 1, k) > 0) &&
+            (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
           v(i, j, k) -= (dt / (density * h)) *
                         (pressure(i, j, k) - pressure(i, j - 1, k));
+        }
 
-        if (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)
+        if ((solid_phi(i, j, k) > 0 && solid_phi(i, j, k - 1) > 0) &&
+            (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)) {
           w(i, j, k) -= (dt / (density * h)) *
                         (pressure(i, j, k) - pressure(i, j, k - 1));
+        }
+      }
+    }
+  }
+}
+
+void Simulation::extend_velocity() {
+  for (int i = 0; i < 8; i++) {
+    sweep_velocity();
+  }
+}
+
+void Simulation::sweep_velocity() {
+  // U --------------------------------
+  sweep_u(1, u.sx - 1, 1, u.sy - 1, 1, u.sz - 1);
+  sweep_u(1, u.sx - 1, 1, u.sy - 1, u.sz - 2, 0);
+  sweep_u(1, u.sx - 1, u.sy - 2, 0, 1, u.sz - 1);
+  sweep_u(1, u.sx - 1, u.sy - 2, 0, u.sz - 2, 0);
+  sweep_u(u.sx - 2, 0, 1, u.sy - 1, 1, u.sz - 1);
+  sweep_u(u.sx - 2, 0, 1, u.sy - 1, u.sz - 2, 0);
+  sweep_u(u.sx - 2, 0, u.sy - 2, 0, 1, u.sz - 1);
+  sweep_u(u.sx - 2, 0, u.sy - 2, 0, u.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(u);
+
+  // V --------------------------------
+  sweep_v(1, v.sx - 1, 1, v.sy - 1, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, 1, v.sy - 1, v.sz - 2, 0);
+  sweep_v(1, v.sx - 1, v.sy - 2, 0, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, v.sy - 2, 0, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 1, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 1, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, v.sy - 2, 0, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, v.sy - 2, 0, v.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(v);
+
+  // W --------------------------------
+  sweep_w(1, w.sx - 1, 1, w.sy - 1, 1, w.sz - 1);
+  sweep_w(1, w.sx - 1, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(1, w.sx - 1, w.sy - 2, 0, 1, w.sz - 1);
+  sweep_w(1, w.sx - 1, w.sy - 2, 0, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, 1, w.sy - 1, 1, w.sz - 1);
+  sweep_w(w.sx - 2, 0, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, w.sy - 2, 0, 1, w.sz - 1);
+  sweep_w(w.sx - 2, 0, w.sy - 2, 0, w.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(w);
+}
+
+void Simulation::sweep_velocity_boundary(Array3f &arr) {
+  // top and bottom
+  for (int i = 0; i < arr.sx; i++) {
+    for (int k = 0; k < arr.sz; k++) {
+      arr(i, 0, k) = arr(i, 1, k);
+      arr(i, arr.sy - 1, k) = arr(i, arr.sy - 2, k);
+    }
+  }
+  // left and right
+  for (int j = 0; j < arr.sy; j++) {
+    for (int k = 0; k < arr.sz; k++) {
+      arr(0, j, k) = arr(1, j, k);
+      arr(arr.sx - 1, j, k) = arr(arr.sx - 2, j, k);
+    }
+  }
+  // front and back
+  for (int i = 0; i < arr.sx; i++) {
+    for (int j = 0; j < arr.sy; j++) {
+      arr(i, j, 0) = arr(i, j, 1);
+      arr(i, j, arr.sz - 1) = arr(i, j, arr.sz - 2);
+    }
+  }
+}
+
+void Simulation::sweep_u(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i - 1, j, k) > 0 && liquid_phi(i, j, k) > 0) {
+          float dp = di * (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k));
+          if (dp < 0)
+            continue;
+          // avg y-dir phi change
+          float dq =
+              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - 1, j - dj, k) - liquid_phi(i, j - dj, k));
+          if (dq < 0)
+            continue;
+          // avg z-dir phi change
+          float dr =
+              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - 1, j, k - dk) - liquid_phi(i, j, k - dk));
+          if (dr < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            u(i, j, k) =
+                weight * (u(i - di, j, k) + u(i, j - dj, k) + u(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            u(i, j, k) = dp * weight * u(i - di, j, k) +
+                         dq * weight * u(i, j - dj, k) +
+                         dr * weight * u(i, j, k - dk);
+          }
+        }
+      }
+    }
+  }
+}
+void Simulation::sweep_v(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i, j - 1, k) > 0 && liquid_phi(i, j, k) > 0) {
+          float dq = dj * (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k));
+          if (dq < 0)
+            continue;
+          // avg x-dir phi change
+          float dp =
+              0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - di, j - 1, k) - liquid_phi(i - di, j, k));
+          if (dp < 0)
+            continue;
+          // avg z-dir phi change
+          float dr = 0.5 * (liquid_phi(i - 1, j - 1, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i - 1, j - 1, k - dk) -
+                            liquid_phi(i, j, k - dk));
+          if (dr < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            v(i, j, k) =
+                weight * (v(i - di, j, k) + v(i, j - dj, k) + v(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            v(i, j, k) = dp * weight * v(i - di, j, k) +
+                         dq * weight * v(i, j - dj, k) +
+                         dr * weight * v(i, j, k - dk);
+          }
+        }
+      }
+    }
+  }
+}
+
+void Simulation::sweep_w(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i, j, k - 1) > 0 && liquid_phi(i, j, k) > 0) {
+          float dr = dk * (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1));
+          if (dr < 0)
+            continue;
+          // avg y-dir phi change
+          float dq = 0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i, j - dj, k - dk) -
+                            liquid_phi(i, j - 1, k - dk));
+          if (dq < 0)
+            continue;
+          // avg x-dir phi change
+          float dp = 0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i - 1, j - 1, k - dk) -
+                            liquid_phi(i - 1, j, k - dk));
+          if (dp < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            w(i, j, k) =
+                weight * (w(i - di, j, k) + w(i, j - dj, k) + w(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            w(i, j, k) = dp * weight * w(i - di, j, k) +
+                         dq * weight * w(i, j - dj, k) +
+                         dr * weight * w(i, j, k - dk);
+          }
+        }
       }
     }
   }
@@ -510,26 +729,26 @@ void Simulation::advance(float dt) {
   float t = 0.0f;
   float substep;
   while (t < dt) {
-    substep = 0.5f * CFL();
+    substep = CFL();
     if (t + substep >= dt) {
       substep = dt - t;
     }
     t += substep;
+    advect_velocity(substep);
+    add_gravity(substep);
     // particle level set method
-    reseed_particles();
-    advect_particles(substep);
     advect_phi(substep);
+    advect_particles(substep);
     correct_levelset();
     reinitialize_phi();
     correct_levelset();
     adjust_particle_radii();
+    reseed_particles();
 
-    advect_velocity(substep);
-    add_gravity(substep);
     enforce_boundaries();
     project(substep);
-    enforce_boundaries();
-
-    // extrapolate();
+    // enforce_boundaries();
+    extend_velocity();
+    // enforce_boundaries();
   }
 }

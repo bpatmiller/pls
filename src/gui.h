@@ -19,7 +19,7 @@ public:
 
   // simulation data
   Simulation simulation;
-  float timestep = 0.05f;
+  float timestep = 0.025f;
   float totaltime = 0.0f;
   // gl variables
   GLFWwindow *window;

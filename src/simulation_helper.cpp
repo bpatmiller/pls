@@ -2,16 +2,17 @@
 
 void Simulation::add_sphere_phi() {
   // create a sphere with radius of 1/4 container size
-  glm::vec3 center(0.5f * nx * h, 0.6f * ny * h, 0.5f * nz * h);
+  glm::vec3 center(0.25f * nx * h, 0.5f * ny * h, 0.5f * nz * h);
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.25f);
+        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.5f);
       }
     }
   }
 }
+
 // inigo quile'z capsule distance function
 static inline float sdCapsule(glm::vec3 p, glm::vec3 a, glm::vec3 b, float r) {
   glm::vec3 pa = p - a, ba = b - a;
@@ -24,7 +25,7 @@ void Simulation::add_cylinder_phi() {
               h * (nz * 0.5f + 0.5f));
   glm::vec3 b(h * (nx * 0.65f + 0.5f), h * (nx * 0.5f + 0.5f),
               h * (nz * 0.5f + 0.5f));
-  float r = lx * 0.1f;
+  float r = lx * 0.25f;
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
@@ -82,6 +83,22 @@ void Simulation::intialize_boundaries() {
 
 // given a position, return the trilinear interpolation
 // of the velocity field at that position
+glm::vec3 Simulation::trilerp_tutvtw(glm::vec3 p) {
+  glm::ivec3 index;
+  glm::vec3 coords;
+  glm::vec3 result;
+  // u
+  position_to_grid(p, U_OFFSET, index, coords);
+  result.x = tu.trilerp(index, coords);
+  // v
+  position_to_grid(p, V_OFFSET, index, coords);
+  result.y = tv.trilerp(index, coords);
+  // w
+  position_to_grid(p, W_OFFSET, index, coords);
+  result.z = tw.trilerp(index, coords);
+  return result;
+}
+
 glm::vec3 Simulation::trilerp_uvw(glm::vec3 p) {
   glm::ivec3 index;
   glm::vec3 coords;
