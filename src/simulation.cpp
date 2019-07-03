@@ -722,6 +722,38 @@ void Simulation::sweep_w(int i0, int i1, int j0, int j1, int k0, int k1) {
   }
 }
 
+void Simulation::compute_volume_fractions_arr(Array3f &vol, Array3f &field,
+                                              glm::vec3 offset) {
+  float substep = h / 2.0f;
+  float num_subcells = 8.0;
+  // compute u-cell volume fractions
+  for (int i = 1; i < field.sx - 1; i++) {
+    for (int j = 1; j < field.sy - 1; j++) {
+      for (int k = 1; k < field.sz - 1; k++) {
+        float sum_fractions = 0;
+        glm::vec3 base_position = glm::vec3(i * h, j * h, k * h) + offset;
+        for (float subx = substep / 2.0f; subx < h; subx += substep) {
+          for (float suby = substep / 2.0f; suby < h; suby += substep) {
+            for (float subz = substep / 2.0f; subz < h; subz += substep) {
+              glm::vec3 position = glm::vec3(subx, suby, subz) + base_position;
+              float phi_val = trilerp_scalar_field(liquid_phi, position);
+              // bridson 6.4
+              sum_fractions += 0.5f - 0.5f * glm::clamp(4 * phi_val / h, -1.0f, 1.0f);
+            }
+          }
+        }
+        vol(i, j, k) = std::max(sum_fractions / num_subcells,1e-3f);
+      }
+    }
+  }
+}
+
+void Simulation::compute_volume_fractions() {
+  compute_volume_fractions_arr(u_vol, u, glm::vec3(-0.5f * h, 0.0f, 0.0f));
+  compute_volume_fractions_arr(v_vol, v, glm::vec3(0.0f, -0.5f * h, 0.0f));
+  compute_volume_fractions_arr(w_vol, w, glm::vec3(0.0f, 0.0f, -0.5f * h));
+}
+
 // advance the simulation by a given time
 // the time will be split up into substeps
 // to satisfy the CFL condition

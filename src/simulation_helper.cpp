@@ -37,7 +37,7 @@ void Simulation::add_cylinder_phi() {
 }
 
 void Simulation::set_vortex_field() {
-  predefined_field = true;
+  // predefined_field = true;
   v.set(0);
   glm::vec2 center(lx * 0.5f, ly * 0.5f);
   for (int i = 0; i < nx + 1; i++) {
@@ -47,9 +47,9 @@ void Simulation::set_vortex_field() {
         float x = position.x - center.x;
         float y = position.y - center.y;
         if (k < nz)
-          u(i, j, k) = -y / (x * x + y * y);
+          u(i, j, k) = 5.0 * -y / (x * x + y * y);
         if (i < nx)
-          w(i, j, k) = x / (x * x + y * y);
+          w(i, j, k) = 5.0 * x / (x * x + y * y);
       }
     }
   }

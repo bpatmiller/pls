@@ -31,8 +31,9 @@ public:
   Array3f sig, norm_grad; // sigmoid smoothing function and norm of gradient
   Array3f liquid_phi_plus, liquid_phi_minus;
   // velocity data
-  Array3f u, v, w;    // velocity field sampled at grid faces
-  Array3f tu, tv, tw; // for storing prior velocity field
+  Array3f u, v, w;             // velocity field sampled at grid faces
+  Array3f tu, tv, tw;          // for storing prior velocity field
+  Array3f u_vol, v_vol, w_vol; // volume fractions for pressure solve
   Array3f u_weight, v_weight, w_weight;
   bool predefined_field = false;
   // pressure data
@@ -72,8 +73,11 @@ public:
     fluid_index.init(nx, ny, nz);
 
     u.init(nx + 1, ny, nz);
+    u_vol.init(nx + 1, ny, nz);
     v.init(nx, ny + 1, nz);
+    v_vol.init(nx, ny + 1, nz);
     w.init(nx, ny, nz + 1);
+    w_vol.init(nx, ny, nx + 1);
     tu.init(nx + 1, ny, nz);
     tv.init(nx, ny + 1, nz);
     tw.init(nx, ny, nz + 1);
@@ -123,6 +127,9 @@ public:
   void advect_particles(float dt);
   void correct_levelset();
   void adjust_particle_radii();
+  void compute_volume_fractions();
+  void compute_volume_fractions_arr(Array3f &vol, Array3f &field,
+                                    glm::vec3 offset);
 
   // auxillary level set methods
   void norm_gradient();
