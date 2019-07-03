@@ -60,6 +60,14 @@ template <class T> struct Array3 {
     return n;
   }
 
+  T mean() const {
+    T n = 0;
+    for (int i = 0; i < size; i++) {
+      n += data[i];
+    }
+    return n / (T)size;
+  }
+
   void copy_to(Array3 &rhs) const {
     assert(size == rhs.size);
     rhs.data.assign(data.begin(), data.end());

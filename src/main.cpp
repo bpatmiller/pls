@@ -21,6 +21,14 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action,
   if (key == GLFW_KEY_Q) {
     glfwSetWindowShouldClose(window, GLFW_TRUE);
     return;
+  } else if (key == GLFW_KEY_V && action == GLFW_RELEASE) {
+    gui->draw_velocity = !gui->draw_velocity;
+  } else if (key == GLFW_KEY_B && action == GLFW_RELEASE) {
+    gui->draw_particles = !gui->draw_particles;
+  } else if (key == GLFW_KEY_G && action == GLFW_RELEASE) {
+    gui->draw_grid = !gui->draw_grid;
+  } else if (key == GLFW_KEY_F && action == GLFW_RELEASE) {
+    gui->display_phi = !gui->display_phi;
   }
   if (action == GLFW_PRESS) {
     gui->keyHeld[key] = true;

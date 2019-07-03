@@ -44,6 +44,11 @@ public:
   float pitch = 0;
   float yaw = 0;
 
+  bool draw_grid = true;
+  bool display_phi = true;
+  bool draw_particles = true;
+  bool draw_velocity = false;
+  bool dirty = true;
   // grid visualization
   Program grid_program;
   VAO grid_vao;
@@ -53,4 +58,9 @@ public:
   Program particle_program;
   VAO particle_vao;
   std::vector<glm::uvec3> sphere_indices;
+  // velocity field visualization
+  Program velocity_program;
+  VAO velocity_vao;
+  std::vector<glm::uvec3> vel_indices;
+  std::vector<std::array<glm::vec3, 2>> vel_offsets;
 };

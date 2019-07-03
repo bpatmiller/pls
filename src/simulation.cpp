@@ -33,7 +33,7 @@ bool Simulation::check_corners(int i, int j, int k) {
 }
 
 void Simulation::reseed_particles() {
-  if (reseed_counter % 20 == 0) {
+  if (reseed_counter % 10 == 0) {
     reseed_counter = 1;
     remove_particles();
     initialize_particles();
@@ -218,9 +218,9 @@ void Simulation::reinitialize_phi() {
   norm_gradient();
 
   float err = 0;
-  float tol = 0.15;
-  int max_iter = 1000;
-  float dt = 0.05f * h;
+  float tol = 1e-2;
+  int max_iter = 2000;
+  float dt = 0.1f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
       throw std::runtime_error("error: phi reinitialization did not converge");
@@ -353,7 +353,7 @@ void Simulation::enforce_boundaries() {
     for (int j = 0; j < solid_phi.sy; j++) {
       for (int k = 0; k < solid_phi.sz; k++) {
         // if solid cell, set face velocities to 0
-        if (solid_phi(i, j, k) < 0) {
+        if (solid_phi(i, j, k) <= 0) {
           liquid_phi(i, j, k) = std::max(liquid_phi(i, j, k), 0.5f * h);
           u(i, j, k) = 0;
           u(i + 1, j, k) = 0;
@@ -368,7 +368,140 @@ void Simulation::enforce_boundaries() {
 }
 
 // project the velocity field onto its divergence-free part
-void Simulation::project(float dt) {}
+void Simulation::project(float dt) {
+  compute_divergence();
+  solve_pressure(dt);
+  apply_pressure_gradient(dt);
+}
+
+// compute negative divergence to be used in rhs of pressure solve
+void Simulation::compute_divergence() {
+  divergence.clear();
+  float coef = -1.0f / h;
+  for (int i = 0; i < divergence.sx; i++) {
+    for (int j = 0; j < divergence.sy; j++) {
+      for (int k = 0; k < divergence.sz; k++) {
+        if (liquid_phi(i, j, k) <= 0)
+          divergence(i, j, k) =
+              coef * (u(i + 1, j, k) - u(i, j, k) + v(i, j + 1, k) -
+                      v(i, j, k) + w(i, j, k + 1) - w(i, j, k));
+      }
+    }
+  }
+}
+
+void Simulation::solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
+                                       double &aii, float dt, int i, int j,
+                                       int k, int i1, int j1, int k1) {
+  if (solid_phi(i1, j1, k1) > 0) {
+    aii += 1;
+    if (liquid_phi(i1, j1, k1) <= 0) {
+      double scale = dt / (density * h * h);
+      tl.push_back(Eigen::Triplet<double>(fluid_index(i, j, k),
+                                          fluid_index(i1, j1, k1), -scale));
+    }
+  }
+}
+
+void Simulation::solve_pressure(float dt) {
+  int nf = 0; // total number of fluid cells
+
+  // assign an index to each fluid cell
+  fluid_index.clear();
+  for (int i = 0; i < fluid_index.sx; i++) {
+    for (int j = 0; j < fluid_index.sy; j++) {
+      for (int k = 0; k < fluid_index.sz; k++) {
+        if (liquid_phi(i, j, k) <= 0) {
+          fluid_index(i, j, k) = nf;
+          nf += 1;
+        }
+      }
+    }
+  }
+
+  // populate triplets
+  std::vector<Eigen::Triplet<double>> tripletList;
+  tripletList.reserve(nf * 7);
+  for (int i = 0; i < divergence.sx; i++) {
+    for (int j = 0; j < divergence.sy; j++) {
+      for (int k = 0; k < divergence.sz; k++) {
+        if (liquid_phi(i, j, k) <= 0) {
+          int index = fluid_index(i, j, k);
+          double aii = 0; // negative sum of nonsolid nbrs
+          double scale = dt / (density * h * h);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i + 1, j, k);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i - 1, j, k);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j + 1, k);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j - 1, k);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k + 1);
+          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k - 1);
+          tripletList.push_back(
+              Eigen::Triplet<double>(index, index, aii * scale));
+        }
+      }
+    }
+  }
+  // construct A from triplets
+  Eigen::SparseMatrix<double> A(nf, nf);
+  A.setFromTriplets(tripletList.begin(), tripletList.end());
+
+  // construct b
+  Eigen::VectorXd b(nf);
+  for (int i = 0; i < divergence.sx; i++) {
+    for (int j = 0; j < divergence.sy; j++) {
+      for (int k = 0; k < divergence.sz; k++) {
+        if (liquid_phi(i, j, k) <= 0) {
+          b(fluid_index(i, j, k)) = divergence(i, j, k);
+        }
+      }
+    }
+  }
+
+  // solve Ax=b
+  Eigen::VectorXd x(nf);
+  Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
+  solver.compute(A);
+  x = solver.solve(b);
+
+  if (solver.info() != Eigen::Success) {
+    throw std::runtime_error("pressure not solved");
+  }
+
+  // set pressure
+  pressure.clear();
+  for (int i = 0; i < fluid_index.sx; i++) {
+    for (int j = 0; j < fluid_index.sy; j++) {
+      for (int k = 0; k < fluid_index.sz; k++) {
+        if (liquid_phi(i, j, k) <= 0) {
+          pressure(i, j, k) = x(fluid_index(i, j, k));
+        }
+      }
+    }
+  }
+}
+
+// apply pressure update with ghost fluid method
+// FIXME add variable densities
+void Simulation::apply_pressure_gradient(float dt) {
+  for (int i = 1; i < nx; i++) {
+    for (int j = 1; j < ny; j++) {
+      for (int k = 1; k < nz; k++) {
+        // note: density is sampled at grid faces
+        if (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)
+          u(i, j, k) -= (dt / (density * h)) *
+                        (pressure(i, j, k) - pressure(i - 1, j, k));
+
+        if (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)
+          v(i, j, k) -= (dt / (density * h)) *
+                        (pressure(i, j, k) - pressure(i, j - 1, k));
+
+        if (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)
+          w(i, j, k) -= (dt / (density * h)) *
+                        (pressure(i, j, k) - pressure(i, j, k - 1));
+      }
+    }
+  }
+}
 
 // advance the simulation by a given time
 // the time will be split up into substeps
@@ -394,9 +527,9 @@ void Simulation::advance(float dt) {
     advect_velocity(substep);
     add_gravity(substep);
     enforce_boundaries();
-    // project(substep);
-    // extrapolate(u, u_valid);
-    // extrapolate(v, v_valid);
-    // extrapolate(w, w_valid);
+    project(substep);
+    enforce_boundaries();
+
+    // extrapolate();
   }
 }

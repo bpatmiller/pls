@@ -12,6 +12,8 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");
   particle_program =
       Program("src/shaders/particle.vs", "", "src/shaders/particle.fs", "");
+  velocity_program =
+      Program("src/shaders/vel.vs", "", "src/shaders/vel.fs", "");
 
   // set up particle vao
   std::vector<glm::vec3> sphere_vertices;
@@ -31,7 +33,7 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
     v *= h;
   }
 
-  // add fluid-containing grid cells
+  // add grid cells
   grid_offsets.resize(simulation.liquid_phi.size);
   int fcc = 0;
   for (int i = 0; i < simulation.liquid_phi.sx; i++) {
@@ -56,6 +58,27 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   grid_vao.setLayout({4}, true);
   grid_vao.vb.set(box_vertices);
   grid_vao.ib.set(grid_offsets);
+
+  // set up velocity field vao
+  std::vector<glm::vec3> vel_vertices = {
+      {-0.005f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.005f, 0.0f, 0.0f}};
+  vel_indices = {{0, 1, 2}};
+  vel_offsets.resize(simulation.liquid_phi.size);
+  for (int i = 0; i < simulation.liquid_phi.sx; i++) {
+    for (int j = 0; j < simulation.liquid_phi.sy; j++) {
+      for (int k = 0; k < simulation.liquid_phi.sz; k++) {
+        glm::vec3 p =
+            glm::vec3(h * i + 0.5f * h, h * j + 0.5f * h, h * k + 0.5f * h);
+        vel_offsets[i + (simulation.liquid_phi.sx * j) +
+                    (simulation.liquid_phi.sx * simulation.liquid_phi.sy * k)] =
+            {p, glm::vec3(0)}; // simulation.trilerp_uvw(p)};
+      }
+    }
+  }
+  velocity_vao.setLayout({3}, false);
+  velocity_vao.setLayout({3, 3}, true);
+  velocity_vao.vb.set(vel_vertices);
+  velocity_vao.ib.set(vel_offsets);
 
   // gl settings
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -124,35 +147,76 @@ void GUI::update(float t, bool force) {
     for (int i = 0; i < simulation.liquid_phi.sx; i++) {
       for (int j = 0; j < simulation.liquid_phi.sy; j++) {
         for (int k = 0; k < simulation.liquid_phi.sz; k++) {
-          grid_offsets[fcc] =
-              glm::vec4(h * i, h * j, h * k, simulation.liquid_phi(i, j, k));
+          if (display_phi)
+            grid_offsets[fcc] =
+                glm::vec4(h * i, h * j, h * k, simulation.liquid_phi(i, j, k));
+          else
+            grid_offsets[fcc] =
+                glm::vec4(h * i, h * j, h * k, simulation.pressure(i, j, k));
+
           fcc++;
         }
       }
     }
     grid_vao.ib.update(grid_offsets, 0);
+
+    float offs = simulation.h * 0.5;
+    // update vao
+    for (int i = 0; i < simulation.liquid_phi.sx; i++) {
+      for (int j = 0; j < simulation.liquid_phi.sy; j++) {
+        for (int k = 0; k < simulation.liquid_phi.sz; k++) {
+          glm::vec3 p =
+              glm::vec3(simulation.h * i + offs, simulation.h * j + offs,
+                        simulation.h * k + offs);
+
+          vel_offsets[i + (simulation.liquid_phi.sx * j) +
+                      (simulation.liquid_phi.sx * simulation.liquid_phi.sy * k)]
+                     [1] = simulation.trilerp_uvw(p);
+        }
+      }
+    }
+    velocity_vao.ib.update(vel_offsets, 0);
+
+    particle_vao.setLayout({3, 1, 1, 1, 1}, true);
+    particle_vao.ib.set(simulation.particles);
+  }
+
+  // draw velocity field
+  if (draw_velocity) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    velocity_program.use();
+    velocity_program.setMat4("projection", projection_matrix);
+    velocity_program.setMat4("view", view_matrix);
+    velocity_vao.bind();
+    glDrawElementsInstanced(GL_TRIANGLES, vel_indices.size() * 3,
+                            GL_UNSIGNED_INT, vel_indices.data(),
+                            simulation.liquid_phi.size);
   }
 
   // draw grid
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  grid_program.use();
-  grid_program.setMat4("projection", projection_matrix);
-  grid_program.setMat4("view", view_matrix);
-  grid_vao.bind();
-  glDrawElementsInstanced(GL_TRIANGLES, box_indices.size() * 3, GL_UNSIGNED_INT,
-                          box_indices.data(), grid_offsets.size());
+  if (draw_grid) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    grid_program.use();
+    grid_program.setMat4("projection", projection_matrix);
+    grid_program.setMat4("view", view_matrix);
+    grid_program.setBool("display_phi", display_phi);
+    grid_vao.bind();
+    glDrawElementsInstanced(GL_TRIANGLES, box_indices.size() * 3,
+                            GL_UNSIGNED_INT, box_indices.data(),
+                            grid_offsets.size());
+  }
 
-  particle_vao.setLayout({3, 1, 1, 1, 1}, true);
-  particle_vao.ib.set(simulation.particles);
   // draw particle
-  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  particle_program.use();
-  particle_program.setMat4("projection", projection_matrix);
-  particle_program.setMat4("view", view_matrix);
-  particle_vao.bind();
-  glDrawElementsInstanced(GL_TRIANGLES, sphere_indices.size() * 3,
-                          GL_UNSIGNED_INT, sphere_indices.data(),
-                          simulation.particles.size());
+  if (draw_particles) {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    particle_program.use();
+    particle_program.setMat4("projection", projection_matrix);
+    particle_program.setMat4("view", view_matrix);
+    particle_vao.bind();
+    glDrawElementsInstanced(GL_TRIANGLES, sphere_indices.size() * 3,
+                            GL_UNSIGNED_INT, sphere_indices.data(),
+                            simulation.particles.size());
+  }
 }
 
 void GUI::create_sphere(float Radius, std::vector<glm::vec3> &s_vertices) {

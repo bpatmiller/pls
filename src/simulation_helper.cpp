@@ -2,12 +2,12 @@
 
 void Simulation::add_sphere_phi() {
   // create a sphere with radius of 1/4 container size
-  glm::vec3 center(0.5f * nx * h, 0.75f * ny * h, 0.5f * nz * h);
+  glm::vec3 center(0.5f * nx * h, 0.6f * ny * h, 0.5f * nz * h);
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.15f);
+        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.25f);
       }
     }
   }

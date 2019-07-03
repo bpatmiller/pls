@@ -4,6 +4,8 @@
 #include "marchingcubes.h"
 #include "util.h"
 #include <algorithm>
+#include <eigen3/Eigen/IterativeLinearSolvers>
+#include <eigen3/Eigen/SparseCore>
 #include <fstream>
 #include <glm/glm.hpp>
 #include <glm/gtc/random.hpp>
@@ -22,6 +24,7 @@ public:
   int nx, ny, nz;   // grid resolution
   float lx, ly, lz; // container width
   float h;          // cell width
+  float density = 8.0f;
   // phi data
   Array3f solid_phi, liquid_phi, phi_copy; // solid and fluid signed distances
   Array3f sig, norm_grad; // sigmoid smoothing function and norm of gradient
@@ -30,8 +33,13 @@ public:
   Array3f u, v, w;    // velocity field sampled at grid faces
   Array3f tu, tv, tw; // for storing prior velocity field
   Array3f u_weight, v_weight, w_weight;
-  Array3f pressure;
   bool predefined_field = false;
+  // pressure data
+  Array3f pressure;
+  Array3f divergence;
+  Eigen::SparseMatrix<double> A;
+  Eigen::VectorXd x, b;
+  Array3i fluid_index;
   // particle data
   std::vector<Particle> particles;
   Array3i particle_count;
@@ -58,6 +66,8 @@ public:
     sig.init(nx, ny, nz);
     norm_grad.init(nx, ny, nz);
     pressure.init(nx, ny, nz);
+    divergence.init(nx, ny, nz);
+    fluid_index.init(nx, ny, nz);
 
     u.init(nx + 1, ny, nz);
     v.init(nx, ny + 1, nz);
@@ -87,13 +97,18 @@ public:
   glm::vec3 rk2(glm::vec3 position, float dt);
   float trilerp_scalar_field(Array3f &field, glm::vec3 position);
   // simulation methods
-
   void advect_phi(float dt);
   void advect_velocity(float dt);
   void reinitialize_phi();
   void add_gravity(float dt);
   void enforce_boundaries();
   void project(float dt);
+  void compute_divergence();
+  void solve_pressure(float dt);
+  void solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
+                             double &aii, float dt, int i, int j, int k, int i1,
+                             int j1, int k1);
+  void apply_pressure_gradient(float dt);
   // particle functions
   void position_to_grid(glm::vec3 p, glm::vec3 offset, glm::ivec3 &index,
                         glm::vec3 &coords);
@@ -108,5 +123,4 @@ public:
 
   // auxillary level set methods
   void norm_gradient();
-  void compute_derivatives();
 };
