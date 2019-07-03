@@ -33,11 +33,11 @@ bool Simulation::check_corners(int i, int j, int k) {
 }
 
 void Simulation::reseed_particles() {
-  if (reseed_counter % 10 == 0) {
+  if (reseed_counter % 20 == 0) {
     reseed_counter = 1;
     remove_particles();
     initialize_particles();
-    std::cout << "reseeding particles\n";
+    // std::cout << "reseeding particles\n";
   }
   reseed_counter++;
 }
@@ -60,7 +60,7 @@ void Simulation::initialize_particles() {
         if (check_corners(i, j, k)) {
           glm::vec3 base_position((i + 0.5f) * h, (j + 0.5f) * h,
                                   (k + 0.5f) * h);
-          for (int count = particle_count(i, j, k); count < 16; count++) {
+          for (int count = particle_count(i, j, k); count < 64; count++) {
             glm::vec3 position =
                 base_position + glm::linearRand(glm::vec3(0.0f), glm::vec3(h));
             float phi_val = trilerp_scalar_field(liquid_phi, position);
@@ -75,12 +75,12 @@ void Simulation::initialize_particles() {
       }
     }
   }
-  std::printf("added %i particles\n", particles_added);
+  // std::printf("added %i particles\n", particles_added);
 }
 
 // remove all extraneous particles
 void Simulation::remove_particles() {
-  int old_size = particles.size();
+  // int old_size = particles.size();
   // mark all distant particles to be deleted
   for (auto &p : particles) {
     float phi_val = trilerp_scalar_field(liquid_phi, p.position);
@@ -91,8 +91,8 @@ void Simulation::remove_particles() {
                                  [](Particle const &p) { return !p.valid; }),
                   particles.end());
 
-  std::printf("removed %i particles\n", old_size - (int)particles.size());
-  std::printf("particle.size()=%i\n", (int)particles.size());
+  // std::printf("removed %i particles\n", old_size - (int)particles.size());
+  // std::printf("particle.size()=%i\n", (int)particles.size());
 }
 
 void Simulation::correct_levelset() {
@@ -148,11 +148,10 @@ void Simulation::correct_levelset() {
   }
 }
 
-// adjust particle radii and reset particle phi values
+// adjust particle radii
 void Simulation::adjust_particle_radii() {
   for (auto &p : particles) {
     float local_phi_val = trilerp_scalar_field(liquid_phi, p.position);
-    p.starting_phi = local_phi_val;
     p.radius = glm::clamp(std::abs(local_phi_val), 0.1f * h, 0.5f * h);
   }
 }
@@ -344,7 +343,10 @@ void Simulation::advect_velocity(float dt) {
 }
 
 // apply acceleration due to gravity
-void Simulation::add_gravity(float dt) { v -= 9.8 * dt; }
+void Simulation::add_gravity(float dt) {
+  if (not predefined_field)
+    v -= 9.8 * dt;
+}
 
 void Simulation::enforce_boundaries() {
   for (int i = 0; i < solid_phi.sx; i++) {

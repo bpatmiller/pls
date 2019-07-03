@@ -67,9 +67,7 @@ int main(int argc, char *argv[]) {
   glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
   gui.init(2.0f, 20, 20, 20);
-  // gui.simulation.add_cylinder_phi();
   gui.simulation.add_sphere_phi();
-  // gui.simulation.set_vortex_field();
 
   while (!glfwWindowShouldClose(window)) {
     gui.update();

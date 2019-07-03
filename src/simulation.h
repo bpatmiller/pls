@@ -31,6 +31,7 @@ public:
   Array3f tu, tv, tw; // for storing prior velocity field
   Array3f u_weight, v_weight, w_weight;
   Array3f pressure;
+  bool predefined_field = false;
   // particle data
   std::vector<Particle> particles;
   Array3i particle_count;
