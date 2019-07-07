@@ -225,16 +225,19 @@ void Simulation::norm_gradient() {
 
 void Simulation::reinitialize_phi() {
   // compute sigmoid function for phi_0
-  sig = liquid_phi / (liquid_phi * liquid_phi + h * h);
+  for (int i = 0; i < sig.size; i++) {
+    sig.data[i] = liquid_phi.data[i] /
+                  std::sqrt(std::pow(liquid_phi.data[i], 2.0f) + h * h);
+  }
   norm_gradient();
 
   float err = 0;
   float tol = 1e-1f;
   int max_iter = 1000;
-  float dt = 1e-1f * h;
+  float dt = 0.5f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
-      throw std::runtime_error("error: phi reinitialization did not converge");
+      std::cout << "error: phi reinitialization did not converge\n";
 
     // compute updated phi values for one timestep
     liquid_phi = liquid_phi - ((sig * (norm_grad - 1)) * dt);
@@ -249,7 +252,9 @@ void Simulation::reinitialize_phi() {
     // std::cout << "err:" << err << "\n";
 
     if (err < tol) {
-      // std::cout << "phi succesfully reinitialized\n";
+      std::printf(
+          "phi succesfully reinitialized with error %f < %f in %i iterations\n",
+          err, tol, iter);
       break;
     }
   }
@@ -779,9 +784,9 @@ void Simulation::advance(float dt) {
     reseed_particles();
 
     enforce_boundaries();
-    project(substep);
+    // project(substep);
     // enforce_boundaries();
-    extend_velocity();
+    // extend_velocity();
     // enforce_boundaries();
   }
 }

@@ -94,7 +94,7 @@ template <class T> struct Array3 {
   }
 
   T &operator()(glm::ivec3 index) { return (*this)(index.x, index.y, index.z); }
-  
+
   // ARRAY3<T> OPERATORS
 
   Array3<T> operator+(const Array3<T> &rhs) {

@@ -74,9 +74,9 @@ int main(int argc, char *argv[]) {
   glfwSetCursorPosCallback(window, MousePosCallback);
   glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
-  gui.init(2.0f, 20, 20, 20);
+  gui.init(2.0f, 15, 15, 15);
+  // gui.simulation.add_pool_phi();
   gui.simulation.add_sphere_phi();
-
   while (!glfwWindowShouldClose(window)) {
     gui.update();
     glfwSwapBuffers(window);
