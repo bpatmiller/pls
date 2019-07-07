@@ -21,11 +21,11 @@ float Simulation::trilerp_scalar_field(Array3f &field, glm::vec3 position) {
 }
 
 // check all eight corners of a grid cell for a small phi value
-bool Simulation::check_corners(int i, int j, int k) {
+bool Simulation::check_corners(Array3f &phi, int i, int j, int k) {
   for (int x = 0; x <= 1; x++) {
     for (int y = 0; y <= 1; y++) {
       for (int z = 0; z <= 1; z++) {
-        float phi_val = liquid_phi(i + x, j + y, k + z);
+        float phi_val = phi(i + x, j + y, k + z);
         if (std::abs(phi_val) < 2.0f * h)
           return true;
       }
@@ -45,78 +45,91 @@ void Simulation::reseed_particles() {
 }
 
 void Simulation::initialize_particles() {
-  int particles_added = 0;
+  for (auto &f : fluids) {
+    initialize_particles(f);
+  }
+}
+
+void Simulation::initialize_particles(Fluid &fluid) {
   // count how many particles are in each cell
-  particle_count.clear();
-  for (auto &p : particles) {
+  fluid.particle_count.clear();
+  for (auto &p : fluid.particles) {
     glm::vec3 coords;
     glm::ivec3 index;
     position_to_grid(p.position, glm::vec3(0), index, coords);
-    particle_count(index) += 1;
+    fluid.particle_count(index) += 1;
   }
 
   // "top off" remaining cells with small phi values
-  for (int i = 1; i < liquid_phi.sx - 2; i++) {
-    for (int j = 1; j < liquid_phi.sy - 2; j++) {
-      for (int k = 1; k < liquid_phi.sz - 2; k++) {
-        if (check_corners(i, j, k)) {
+  for (int i = 1; i < fluid.phi.sx - 2; i++) {
+    for (int j = 1; j < fluid.phi.sy - 2; j++) {
+      for (int k = 1; k < fluid.phi.sz - 2; k++) {
+        if (check_corners(fluid.phi, i, j, k)) {
           glm::vec3 base_position((i + 0.5f) * h, (j + 0.5f) * h,
                                   (k + 0.5f) * h);
-          for (int count = particle_count(i, j, k); count < 64; count++) {
+          for (int count = fluid.particle_count(i, j, k); count < 64; count++) {
             glm::vec3 position =
                 base_position + glm::linearRand(glm::vec3(0.0f), glm::vec3(h));
             // attraction step
-            float initial_phi_val = trilerp_scalar_field(liquid_phi, position);
+            float initial_phi_val = trilerp_scalar_field(fluid.phi, position);
             float phi_goal =
                 (initial_phi_val > 0)
                     ? glm::clamp(initial_phi_val, 0.1f * h, 1.0f * h)
                     : glm::clamp(initial_phi_val, -1.0f * h, -0.1f * h);
-            glm::vec3 normal = glm::normalize(liquid_phi.gradlerp(
+            glm::vec3 normal = glm::normalize(fluid.phi.gradlerp(
                 glm::ivec3(i, j, k), (position - base_position) / h, h));
             glm::vec3 new_position =
                 glm::clamp(position + (phi_goal - initial_phi_val) * normal,
                            1.0001f * h, (nx - 1.0001f) * h);
-            float new_phi_val = trilerp_scalar_field(liquid_phi, new_position);
+            float new_phi_val = trilerp_scalar_field(fluid.phi, new_position);
 
             // add particle with position, starting phi, and radius
             Particle p(new_position, new_phi_val,
                        glm::clamp(std::abs(new_phi_val), 0.1f * h, 0.5f * h));
-            particles.push_back(p);
-            particle_count(i, j, k) += 1;
-            particles_added++;
+            fluid.particles.push_back(p);
+            fluid.particle_count(i, j, k) += 1;
           }
         }
       }
     }
   }
-  // std::printf("added %i particles\n", particles_added);
+}
+
+void Simulation::remove_particles() {
+  for (auto &f : fluids) {
+    remove_particles(f);
+  }
 }
 
 // remove all extraneous particles
-void Simulation::remove_particles() {
-  // int old_size = particles.size();
+void Simulation::remove_particles(Fluid &fluid) {
   // mark all distant particles to be deleted
-  for (auto &p : particles) {
-    float phi_val = trilerp_scalar_field(liquid_phi, p.position);
+  for (auto &p : fluid.particles) {
+    float phi_val = trilerp_scalar_field(fluid.phi, p.position);
     p.valid = (std::abs(phi_val) < 2.0f * h);
   }
   // remove from particle vector
-  particles.erase(std::remove_if(particles.begin(), particles.end(),
-                                 [](Particle const &p) { return !p.valid; }),
-                  particles.end());
-
-  // std::printf("removed %i particles\n", old_size - (int)particles.size());
-  // std::printf("particle.size()=%i\n", (int)particles.size());
+  fluid.particles.erase(
+      std::remove_if(fluid.particles.begin(), fluid.particles.end(),
+                     [](Particle const &p) { return !p.valid; }),
+      fluid.particles.end());
 }
 
 void Simulation::correct_levelset() {
-  // FIXME check equals operator
-  liquid_phi_minus = liquid_phi;
-  liquid_phi_plus = liquid_phi;
-  for (auto &p : particles) {
+  for (auto f : fluids) {
+    correct_levelset(f);
+  }
+}
+
+void Simulation::correct_levelset(Fluid &fluid) {
+  fluid.phi_minus = fluid.phi;
+  fluid.phi_plus = fluid.phi;
+
+  for (auto &p : fluid.particles) {
     // determine if the particle is escaped
-    float local_phi_val = trilerp_scalar_field(liquid_phi, p.position);
-    if (p.starting_phi * local_phi_val < 0 && local_phi_val > p.radius) {
+    float local_phi_val = trilerp_scalar_field(fluid.phi, p.position);
+    if (p.starting_phi * local_phi_val < 0 &&
+        std::abs(local_phi_val) > p.radius) {
       // compute the phi_p at all eight grid points
       glm::ivec3 index;
       glm::vec3 coords;
@@ -134,14 +147,13 @@ void Simulation::correct_levelset() {
                 sign_p * (p.radius - glm::distance(grid_position, p.position));
             // rebuild phi_+
             if (sign_p > 0) {
-              liquid_phi_plus(index.x + i, index.y + j, index.z + k) =
-                  std::max(phi_p, liquid_phi_plus(index.x + i, index.y + j,
-                                                  index.z + k));
+              fluid.phi_plus(index.x + i, index.y + j, index.z + k) = std::max(
+                  phi_p, fluid.phi_plus(index.x + i, index.y + j, index.z + k));
             }
             // rebuild phi_-
             else {
-              liquid_phi_plus(index.x + i, index.y + j, index.z + k) =
-                  std::min(phi_p, liquid_phi_plus(index.x + i, index.y + j,
+              fluid.phi_minus(index.x + i, index.y + j, index.z + k) =
+                  std::min(phi_p, fluid.phi_minus(index.x + i, index.y + j,
                                                   index.z + k));
             }
           }
@@ -152,128 +164,111 @@ void Simulation::correct_levelset() {
 
   // merge phi_+ and phi_-
   // equation 13 in PLS
-  for (int i = 0; i < liquid_phi.size; i++) {
-    if (std::abs(liquid_phi_plus.data[i]) >
-        std::abs(liquid_phi_minus.data[i])) {
-      liquid_phi.data[i] = liquid_phi_minus.data[i];
+  for (int i = 0; i < fluid.phi.size; i++) {
+    if (std::abs(fluid.phi_plus.data[i]) > std::abs(fluid.phi_minus.data[i])) {
+      fluid.phi.data[i] = fluid.phi_minus.data[i];
     } else {
-      liquid_phi.data[i] = liquid_phi_plus.data[i];
+      fluid.phi.data[i] = fluid.phi_plus.data[i];
     }
   }
 }
 
-// adjust particle radii
 void Simulation::adjust_particle_radii() {
-  for (auto &p : particles) {
-    float local_phi_val = trilerp_scalar_field(liquid_phi, p.position);
+  for (auto &f : fluids) {
+    adjust_particle_radii(f);
+  }
+}
+
+// adjust particle radii
+void Simulation::adjust_particle_radii(Fluid &fluid) {
+  for (auto &p : fluid.particles) {
+    float local_phi_val = trilerp_scalar_field(fluid.phi, p.position);
     p.radius = glm::clamp(std::abs(local_phi_val), 0.1f * h, 0.5f * h);
   }
 }
 
 // compute gradient norm with godunov scheme
-void Simulation::norm_gradient() {
+// FIXME reimpliment this in a much cleaner way
+// specifically ignore edge cases and use the max(min max)
+// formulation
+void Simulation::norm_gradient(Fluid &fluid) {
   float limit = (nx + ny + nz) * h;
-  liquid_phi.clamp(-limit, limit);
-  norm_grad.set(1.0f);
+  fluid.phi.clamp(-limit, limit);
+  fluid.norm_grad.set(1.0f);
 
   // non-boundary cells
-  for (int i = 1; i < norm_grad.sx - 1; i++) {
-    for (int j = 1; j < norm_grad.sy - 1; j++) {
-      for (int k = 1; k < norm_grad.sz - 1; k++) {
+  for (int i = 1; i < nx - 1; i++) {
+    for (int j = 1; j < ny - 1; j++) {
+      for (int k = 1; k < nz - 1; k++) {
         // value for choosing upwinding direction
-        float a = sig(i, j, k);
+        float a = fluid.sig(i, j, k);
         // dxn = dx negative = backwards upwinding
         // dxp = dx positive = forwards upwinding
-        bool fx = (i == 0);
-        bool fy = (j == 0);
-        bool fz = (k == 0);
-        bool bx = (i == norm_grad.sx - 1);
-        bool by = (j == norm_grad.sy - 1);
-        bool bz = (k == norm_grad.sz - 1);
 
         float phidx = 0;
         float phidy = 0;
         float phidz = 0;
         // phi_dx
-        if (fx or bx) {
-          if (fx) {
-            phidx = (liquid_phi(i + 1, j, k) - liquid_phi(i, j, k)) / h;
-            phidx *= phidx;
-          } else {
-            phidx = (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k)) / h;
-            phidx *= phidx;
-          }
-        } else {
-          float dxn = (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k)) / h;
-          float dxp = (liquid_phi(i + 1, j, k) - liquid_phi(i, j, k)) / h;
-          if (a >= 0) {
-            dxn = (dxn > 0) ? dxn * dxn : 0;
-            dxp = (dxp < 0) ? dxp * dxp : 0;
-            phidx = std::max(dxn, dxp);
-          } else {
-            dxn = (dxn < 0) ? dxn * dxn : 0;
-            dxp = (dxp > 0) ? dxp * dxp : 0;
-            phidx = std::max(dxn, dxp);
-          }
-        }
-        // phi_dy
-        if (fy or by) {
-          if (fy) {
-            phidy = (liquid_phi(i, j + 1, k) - liquid_phi(i, j, k)) / h;
-            phidy *= phidy;
-          } else {
-            phidy = (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k)) / h;
-            phidy *= phidy;
-          }
-        } else {
-          float dyn = (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k)) / h;
-          float dyp = (liquid_phi(i, j + 1, k) - liquid_phi(i, j, k)) / h;
-          if (a >= 0) {
-            dyn = (dyn > 0) ? dyn * dyn : 0;
-            dyp = (dyp < 0) ? dyp * dyp : 0;
-            phidy = std::max(dyn, dyp);
-          } else {
-            dyn = (dyn < 0) ? dyn * dyn : 0;
-            dyp = (dyp > 0) ? dyp * dyp : 0;
-            phidy = std::max(dyn, dyp);
-          }
-        }
-        // phi_dz
-        if (fz or bz) {
-          if (fz) {
-            phidz = (liquid_phi(i, j, k + 1) - liquid_phi(i, j, k)) / h;
-            phidz *= phidz;
-          } else {
-            phidz = (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1)) / h;
-            phidz *= phidz;
-          }
-        } else {
-          float dzn = (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1)) / h;
-          float dzp = (liquid_phi(i, j, k + 1) - liquid_phi(i, j, k)) / h;
 
-          if (a >= 0) {
-            dzn = (dzn > 0) ? dzn * dzn : 0;
-            dzp = (dzp < 0) ? dzp * dzp : 0;
-            phidz = std::max(dzp, dzn);
-          } else {
-            dzn = (dzn < 0) ? dzn * dzn : 0;
-            dzp = (dzp > 0) ? dzp * dzp : 0;
-            phidz = std::max(dzp, dzn);
-          }
+        float dxn = (fluid.phi(i, j, k) - fluid.phi(i - 1, j, k)) / h;
+        float dxp = (fluid.phi(i + 1, j, k) - fluid.phi(i, j, k)) / h;
+        if (a >= 0) {
+          dxn = (dxn > 0) ? dxn * dxn : 0;
+          dxp = (dxp < 0) ? dxp * dxp : 0;
+          phidx = std::max(dxn, dxp);
+        } else {
+          dxn = (dxn < 0) ? dxn * dxn : 0;
+          dxp = (dxp > 0) ? dxp * dxp : 0;
+          phidx = std::max(dxn, dxp);
         }
-        norm_grad(i, j, k) = std::sqrt(phidx + phidy + phidz);
+
+        // phi_dy
+
+        float dyn = (fluid.phi(i, j, k) - fluid.phi(i, j - 1, k)) / h;
+        float dyp = (fluid.phi(i, j + 1, k) - fluid.phi(i, j, k)) / h;
+        if (a >= 0) {
+          dyn = (dyn > 0) ? dyn * dyn : 0;
+          dyp = (dyp < 0) ? dyp * dyp : 0;
+          phidy = std::max(dyn, dyp);
+        } else {
+          dyn = (dyn < 0) ? dyn * dyn : 0;
+          dyp = (dyp > 0) ? dyp * dyp : 0;
+          phidy = std::max(dyn, dyp);
+        }
+
+        // phi_dz
+        float dzn = (fluid.phi(i, j, k) - fluid.phi(i, j, k - 1)) / h;
+        float dzp = (fluid.phi(i, j, k + 1) - fluid.phi(i, j, k)) / h;
+
+        if (a >= 0) {
+          dzn = (dzn > 0) ? dzn * dzn : 0;
+          dzp = (dzp < 0) ? dzp * dzp : 0;
+          phidz = std::max(dzp, dzn);
+        } else {
+          dzn = (dzn < 0) ? dzn * dzn : 0;
+          dzp = (dzp > 0) ? dzp * dzp : 0;
+          phidz = std::max(dzp, dzn);
+        }
+
+        fluid.norm_grad(i, j, k) = std::sqrt(phidx + phidy + phidz);
       }
     }
   }
 }
 
 void Simulation::reinitialize_phi() {
-  // compute sigmoid function for phi_0
-  for (int i = 0; i < sig.size; i++) {
-    sig.data[i] = liquid_phi.data[i] /
-                  std::sqrt(std::pow(liquid_phi.data[i], 2.0f) + h * h);
+  for (auto &f : fluids) {
+    reinitialize_phi(f);
   }
-  norm_gradient();
+}
+
+void Simulation::reinitialize_phi(Fluid &fluid) {
+  // compute sigmoid function for phi_0
+  for (int i = 0; i < fluid.sig.size; i++) {
+    fluid.sig.data[i] = fluid.phi.data[i] /
+                        std::sqrt(std::pow(fluid.phi.data[i], 2.0f) + h * h);
+  }
+  norm_gradient(fluid);
 
   float err = 0;
   float tol = 1e-1f;
@@ -286,43 +281,49 @@ void Simulation::reinitialize_phi() {
 
     // compute updated phi values for one timestep
     // liquid_phi = liquid_phi - ((sig * (norm_grad - 1.0f)) * dt);
-    for (int i = 1; i < liquid_phi.sx - 1; i++) {
-      for (int j = 1; j < liquid_phi.sy - 1; j++) {
-        for (int k = 1; k < liquid_phi.sz - 1; k++) {
-          liquid_phi(i, j, k) -=
-              sig(i, j, k) * (norm_grad(i, j, k) - 1.0f) * dt;
+    for (int i = 1; i < nx - 1; i++) {
+      for (int j = 1; j < ny - 1; j++) {
+        for (int k = 1; k < nz - 1; k++) {
+          fluid.phi(i, j, k) -=
+              fluid.sig(i, j, k) * (fluid.norm_grad(i, j, k) - 1.0f) * dt;
         }
       }
     }
     // recompute gradient norms
-    norm_gradient();
+    norm_gradient(fluid);
     // compute average error
     err = 0;
-    for (int i = 0; i < norm_grad.size; i++) {
-      err += std::abs(norm_grad.data[i] - 1.0f);
+    for (int i = 0; i < fluid.norm_grad.size; i++) {
+      err += std::abs(fluid.norm_grad.data[i] - 1.0f);
     }
-    err /= static_cast<float>(norm_grad.size);
+    err /= static_cast<float>(fluid.norm_grad.size);
     // std::cout << "err:" << err << "\n";
 
     if (err < tol) {
-      std::printf(
-          "phi succesfully reinitialized with error %f < %f in %i iterations\n",
-          err, tol, iter);
+      // std::printf(
+      //     "phi successfully reinitialized with error %f < %f in %i
+      //     iterations\n", err, tol, iter);
       break;
     }
   }
 }
 
-// particle advection with bounds checking
 void Simulation::advect_particles(float dt) {
-  for (auto &p : particles) {
+  for (auto &f : fluids) {
+    advect_particles(f, dt);
+  }
+}
+
+// particle advection with bounds checking
+void Simulation::advect_particles(Fluid &fluid, float dt) {
+  for (auto &p : fluid.particles) {
     p.position = rk2(p.position, dt);
-    // bounds checking
+    // data for bounds checking
     glm::vec3 coords;
     glm::ivec3 index;
     position_to_grid(p.position, glm::vec3(0), index, coords);
     float solid_phi_val = solid_phi.trilerp(index, coords);
-    // if the particle is a NEGATIVE marker particle
+    // only if the particle is a NEGATIVE marker particle
     if (solid_phi_val < 0 && p.starting_phi < 0) {
       glm::vec3 grad = solid_phi.gradlerp(index, coords, h);
       if (glm::length(grad) > 0) {
@@ -349,23 +350,29 @@ glm::vec3 Simulation::rk2(glm::vec3 position, float dt) {
   return mid;
 }
 
-// advect phi with equation phi_t = - V dot grad phi
 void Simulation::advect_phi(float dt) {
-  phi_copy.clear();
-  for (int i = 0; i < liquid_phi.sx; i++) {
-    for (int j = 0; j < liquid_phi.sy; j++) {
-      for (int k = 0; k < liquid_phi.sz; k++) {
+  for (auto &f : fluids) {
+    advect_phi(f, dt);
+  }
+}
+
+// advect phi with equation phi_t = - V dot grad phi
+void Simulation::advect_phi(Fluid &fluid, float dt) {
+  fluid.phi_copy.clear();
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
 
         glm::vec3 velocity = trilerp_uvw(position);
-        glm::vec3 phi_grad = liquid_phi.upwind_gradient(i, j, k, h, velocity);
+        glm::vec3 phi_grad = fluid.phi.upwind_gradient(i, j, k, h, velocity);
 
-        phi_copy(i, j, k) =
-            liquid_phi(i, j, k) - dt * glm::dot(velocity, phi_grad);
+        fluid.phi_copy(i, j, k) =
+            fluid.phi(i, j, k) - dt * glm::dot(velocity, phi_grad);
       }
     }
   }
-  phi_copy.copy_to(liquid_phi);
+  fluid.phi_copy.copy_to(fluid.phi);
 }
 
 // semi-lagrangian advection via backwards euler as in [Stam 1999]
@@ -415,10 +422,7 @@ void Simulation::advect_velocity(float dt) {
 }
 
 // apply acceleration due to gravity
-void Simulation::add_gravity(float dt) {
-  if (not predefined_field)
-    v -= 9.8f * dt;
-}
+void Simulation::add_gravity(float dt) { v -= 9.8f * dt; }
 
 void Simulation::enforce_boundaries() {
   for (int i = 0; i < solid_phi.sx; i++) {
@@ -426,7 +430,6 @@ void Simulation::enforce_boundaries() {
       for (int k = 0; k < solid_phi.sz; k++) {
         // if solid cell, set face velocities to 0
         if (solid_phi(i, j, k) <= 0) {
-          liquid_phi(i, j, k) = std::max(liquid_phi(i, j, k), 0.5f * h);
           u(i, j, k) = 0;
           u(i + 1, j, k) = 0;
           v(i, j, k) = 0;
@@ -437,14 +440,22 @@ void Simulation::enforce_boundaries() {
       }
     }
   }
+
+  // make sure we dont have fluid overlapping with solid
+  for (auto &f : fluids) {
+    for (int i = 0; i < solid_phi.size; i++) {
+      if (solid_phi.data[i] <= 0)
+        f.phi.data[i] = std::max(f.phi.data[i], 0.5f * h);
+    }
+  }
 }
 
 // project the velocity field onto its divergence-free part
-void Simulation::project(float dt) {
-  compute_divergence();
-  solve_pressure(dt);
-  apply_pressure_gradient(dt);
-}
+// void Simulation::project(float dt) {
+//   compute_divergence();
+//   solve_pressure(dt);
+//   apply_pressure_gradient(dt);
+// }
 
 // compute negative divergence to be used in rhs of pressure solve
 void Simulation::compute_divergence() {
@@ -459,324 +470,126 @@ void Simulation::compute_divergence() {
   }
 }
 
-void Simulation::solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
-                                       double &aii, float dt, int i, int j,
-                                       int k, int i1, int j1, int k1) {
-  if (solid_phi(i1, j1, k1) > 0) {
-    aii += 1;
-    if (liquid_phi(i1, j1, k1) <= 0) {
-      double scale = dt / (density_1 * h * h);
-      tl.push_back(Eigen::Triplet<double>(fluid_index(i, j, k),
-                                          fluid_index(i1, j1, k1), -scale));
-    }
-  }
-}
+// void Simulation::solve_pressure_helper(std::vector<Eigen::Triplet<double>>
+// &tl,
+//                                        double &aii, float dt, int i, int j,
+//                                        int k, int i1, int j1, int k1) {
+//   if (solid_phi(i1, j1, k1) > 0) {
+//     aii += 1;
+//     if (liquid_phi(i1, j1, k1) <= 0) {
+//       double scale = dt / (density_1 * h * h);
+//       tl.push_back(Eigen::Triplet<double>(fluid_index(i, j, k),
+//                                           fluid_index(i1, j1, k1), -scale));
+//     }
+//   }
+// }
 
-void Simulation::solve_pressure(float dt) {
-  int nf = 0; // total number of fluid cells
+// void Simulation::solve_pressure(float dt) {
+//   int nf = 0; // total number of fluid cells
 
-  // assign an index to each fluid cell
-  fluid_index.clear();
-  for (int i = 0; i < fluid_index.sx; i++) {
-    for (int j = 0; j < fluid_index.sy; j++) {
-      for (int k = 0; k < fluid_index.sz; k++) {
-        if (liquid_phi(i, j, k) <= 0) {
-          fluid_index(i, j, k) = nf;
-          nf += 1;
-        }
-      }
-    }
-  }
+//   // assign an index to each fluid cell
+//   fluid_index.clear();
+//   for (int i = 0; i < fluid_index.sx; i++) {
+//     for (int j = 0; j < fluid_index.sy; j++) {
+//       for (int k = 0; k < fluid_index.sz; k++) {
+//         if (liquid_phi(i, j, k) <= 0) {
+//           fluid_index(i, j, k) = nf;
+//           nf += 1;
+//         }
+//       }
+//     }
+//   }
 
-  // populate triplets
-  std::vector<Eigen::Triplet<double>> tripletList;
-  tripletList.reserve(nf * 7);
-  for (int i = 0; i < divergence.sx; i++) {
-    for (int j = 0; j < divergence.sy; j++) {
-      for (int k = 0; k < divergence.sz; k++) {
-        if (liquid_phi(i, j, k) <= 0) {
-          int index = fluid_index(i, j, k);
-          double aii = 0; // negative sum of nonsolid nbrs
-          double scale = dt / (density_1 * h * h);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i + 1, j, k);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i - 1, j, k);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j + 1, k);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j - 1, k);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k + 1);
-          solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k - 1);
-          tripletList.push_back(
-              Eigen::Triplet<double>(index, index, aii * scale));
-        }
-      }
-    }
-  }
-  // construct A from triplets
-  Eigen::SparseMatrix<double> A(nf, nf);
-  A.setFromTriplets(tripletList.begin(), tripletList.end());
+//   // populate triplets
+//   std::vector<Eigen::Triplet<double>> tripletList;
+//   tripletList.reserve(nf * 7);
+//   for (int i = 0; i < divergence.sx; i++) {
+//     for (int j = 0; j < divergence.sy; j++) {
+//       for (int k = 0; k < divergence.sz; k++) {
+//         if (liquid_phi(i, j, k) <= 0) {
+//           int index = fluid_index(i, j, k);
+//           double aii = 0; // negative sum of nonsolid nbrs
+//           double scale = dt / (density_1 * h * h);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i + 1, j, k);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i - 1, j, k);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j + 1, k);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j - 1, k);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k + 1);
+//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k - 1);
+//           tripletList.push_back(
+//               Eigen::Triplet<double>(index, index, aii * scale));
+//         }
+//       }
+//     }
+//   }
+//   // construct A from triplets
+//   Eigen::SparseMatrix<double> A(nf, nf);
+//   A.setFromTriplets(tripletList.begin(), tripletList.end());
 
-  // construct b
-  Eigen::VectorXd b(nf);
-  for (int i = 0; i < divergence.sx; i++) {
-    for (int j = 0; j < divergence.sy; j++) {
-      for (int k = 0; k < divergence.sz; k++) {
-        if (liquid_phi(i, j, k) <= 0) {
-          b(fluid_index(i, j, k)) = (-1.0 / h) * divergence(i, j, k);
-        }
-      }
-    }
-  }
+//   // construct b
+//   Eigen::VectorXd b(nf);
+//   for (int i = 0; i < divergence.sx; i++) {
+//     for (int j = 0; j < divergence.sy; j++) {
+//       for (int k = 0; k < divergence.sz; k++) {
+//         if (liquid_phi(i, j, k) <= 0) {
+//           b(fluid_index(i, j, k)) = (-1.0 / h) * divergence(i, j, k);
+//         }
+//       }
+//     }
+//   }
 
-  // solve Ax=b
-  Eigen::VectorXd x(nf);
-  Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
-  solver.compute(A);
-  x = solver.solve(b);
+//   // solve Ax=b
+//   Eigen::VectorXd x(nf);
+//   Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
+//   solver.compute(A);
+//   x = solver.solve(b);
 
-  if (solver.info() != Eigen::Success) {
-    throw std::runtime_error("pressure not solved");
-  }
+//   if (solver.info() != Eigen::Success) {
+//     throw std::runtime_error("pressure not solved");
+//   }
 
-  // set pressure
-  pressure.clear();
-  for (int i = 0; i < fluid_index.sx; i++) {
-    for (int j = 0; j < fluid_index.sy; j++) {
-      for (int k = 0; k < fluid_index.sz; k++) {
-        if (liquid_phi(i, j, k) <= 0) {
-          pressure(i, j, k) = x(fluid_index(i, j, k));
-        }
-      }
-    }
-  }
-}
+//   // set pressure
+//   pressure.clear();
+//   for (int i = 0; i < fluid_index.sx; i++) {
+//     for (int j = 0; j < fluid_index.sy; j++) {
+//       for (int k = 0; k < fluid_index.sz; k++) {
+//         if (liquid_phi(i, j, k) <= 0) {
+//           pressure(i, j, k) = x(fluid_index(i, j, k));
+//         }
+//       }
+//     }
+//   }
+// }
 
-// apply pressure update
-// TODO use ghost fluid method
-// FIXME add variable densities
-void Simulation::apply_pressure_gradient(float dt) {
-  for (int i = 1; i < nx; i++) {
-    for (int j = 1; j < ny; j++) {
-      for (int k = 1; k < nz; k++) {
-        // note: density is sampled at grid faces
-        if ((solid_phi(i, j, k) > 0 && solid_phi(i - 1, j, k) > 0) &&
-            (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          u(i, j, k) -= (dt / (density_1 * h)) *
-                        (pressure(i, j, k) - pressure(i - 1, j, k));
-        }
+// // apply pressure update
+// // TODO use ghost fluid method
+// // FIXME add variable densities
+// void Simulation::apply_pressure_gradient(float dt) {
+//   for (int i = 1; i < nx; i++) {
+//     for (int j = 1; j < ny; j++) {
+//       for (int k = 1; k < nz; k++) {
+//         // note: density is sampled at grid faces
+//         if ((solid_phi(i, j, k) > 0 && solid_phi(i - 1, j, k) > 0) &&
+//             (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
+//           u(i, j, k) -= (dt / (density_1 * h)) *
+//                         (pressure(i, j, k) - pressure(i - 1, j, k));
+//         }
 
-        if ((solid_phi(i, j, k) > 0 && solid_phi(i, j - 1, k) > 0) &&
-            (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          v(i, j, k) -= (dt / (density_1 * h)) *
-                        (pressure(i, j, k) - pressure(i, j - 1, k));
-        }
+//         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j - 1, k) > 0) &&
+//             (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
+//           v(i, j, k) -= (dt / (density_1 * h)) *
+//                         (pressure(i, j, k) - pressure(i, j - 1, k));
+//         }
 
-        if ((solid_phi(i, j, k) > 0 && solid_phi(i, j, k - 1) > 0) &&
-            (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)) {
-          w(i, j, k) -= (dt / (density_1 * h)) *
-                        (pressure(i, j, k) - pressure(i, j, k - 1));
-        }
-      }
-    }
-  }
-}
-
-void Simulation::extend_velocity() {
-  for (int i = 0; i < 8; i++) {
-    sweep_velocity();
-  }
-}
-
-void Simulation::sweep_velocity() {
-  // U --------------------------------
-  sweep_u(1, u.sx - 1, 1, u.sy - 1, 1, u.sz - 1);
-  sweep_u(1, u.sx - 1, 1, u.sy - 1, u.sz - 2, 0);
-  sweep_u(1, u.sx - 1, u.sy - 2, 0, 1, u.sz - 1);
-  sweep_u(1, u.sx - 1, u.sy - 2, 0, u.sz - 2, 0);
-  sweep_u(u.sx - 2, 0, 1, u.sy - 1, 1, u.sz - 1);
-  sweep_u(u.sx - 2, 0, 1, u.sy - 1, u.sz - 2, 0);
-  sweep_u(u.sx - 2, 0, u.sy - 2, 0, 1, u.sz - 1);
-  sweep_u(u.sx - 2, 0, u.sy - 2, 0, u.sz - 2, 0);
-  // set boundary cells
-  sweep_velocity_boundary(u);
-
-  // V --------------------------------
-  sweep_v(1, v.sx - 1, 1, v.sy - 1, 1, v.sz - 1);
-  sweep_v(1, v.sx - 1, 1, v.sy - 1, v.sz - 2, 0);
-  sweep_v(1, v.sx - 1, v.sy - 2, 0, 1, v.sz - 1);
-  sweep_v(1, v.sx - 1, v.sy - 2, 0, v.sz - 2, 0);
-  sweep_v(v.sx - 2, 0, 1, v.sy - 1, 1, v.sz - 1);
-  sweep_v(v.sx - 2, 0, 1, v.sy - 1, v.sz - 2, 0);
-  sweep_v(v.sx - 2, 0, v.sy - 2, 0, 1, v.sz - 1);
-  sweep_v(v.sx - 2, 0, v.sy - 2, 0, v.sz - 2, 0);
-  // set boundary cells
-  sweep_velocity_boundary(v);
-
-  // W --------------------------------
-  sweep_w(1, w.sx - 1, 1, w.sy - 1, 1, w.sz - 1);
-  sweep_w(1, w.sx - 1, 1, w.sy - 1, w.sz - 2, 0);
-  sweep_w(1, w.sx - 1, w.sy - 2, 0, 1, w.sz - 1);
-  sweep_w(1, w.sx - 1, w.sy - 2, 0, w.sz - 2, 0);
-  sweep_w(w.sx - 2, 0, 1, w.sy - 1, 1, w.sz - 1);
-  sweep_w(w.sx - 2, 0, 1, w.sy - 1, w.sz - 2, 0);
-  sweep_w(w.sx - 2, 0, w.sy - 2, 0, 1, w.sz - 1);
-  sweep_w(w.sx - 2, 0, w.sy - 2, 0, w.sz - 2, 0);
-  // set boundary cells
-  sweep_velocity_boundary(w);
-}
-
-void Simulation::sweep_velocity_boundary(Array3f &arr) {
-  // top and bottom
-  for (int i = 0; i < arr.sx; i++) {
-    for (int k = 0; k < arr.sz; k++) {
-      arr(i, 0, k) = arr(i, 1, k);
-      arr(i, arr.sy - 1, k) = arr(i, arr.sy - 2, k);
-    }
-  }
-  // left and right
-  for (int j = 0; j < arr.sy; j++) {
-    for (int k = 0; k < arr.sz; k++) {
-      arr(0, j, k) = arr(1, j, k);
-      arr(arr.sx - 1, j, k) = arr(arr.sx - 2, j, k);
-    }
-  }
-  // front and back
-  for (int i = 0; i < arr.sx; i++) {
-    for (int j = 0; j < arr.sy; j++) {
-      arr(i, j, 0) = arr(i, j, 1);
-      arr(i, j, arr.sz - 1) = arr(i, j, arr.sz - 2);
-    }
-  }
-}
-
-void Simulation::sweep_u(int i0, int i1, int j0, int j1, int k0, int k1) {
-  int di = (i0 < i1) ? 1 : -1;
-  int dj = (j0 < j1) ? 1 : -1;
-  int dk = (k0 < k1) ? 1 : -1;
-
-  float weight;
-
-  for (int i = i0; i != i1; i += di) {
-    for (int j = j0; j != j1; j += dj) {
-      for (int k = k0; k != k1; k += dk) {
-        if (liquid_phi(i - 1, j, k) > 0 && liquid_phi(i, j, k) > 0) {
-          float dp = di * (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k));
-          if (dp < 0)
-            continue;
-          // avg y-dir phi change
-          float dq =
-              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
-                     liquid_phi(i - 1, j - dj, k) - liquid_phi(i, j - dj, k));
-          if (dq < 0)
-            continue;
-          // avg z-dir phi change
-          float dr =
-              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
-                     liquid_phi(i - 1, j, k - dk) - liquid_phi(i, j, k - dk));
-          if (dr < 0)
-            continue;
-
-          // weighted sum of other velocities
-          if (dp + dq + dr == 0) {
-            weight = 1.0f / 3.0f;
-            u(i, j, k) =
-                weight * (u(i - di, j, k) + u(i, j - dj, k) + u(i, j, k - dk));
-          } else {
-            weight = 1.0f / (dp + dq + dr);
-            u(i, j, k) = dp * weight * u(i - di, j, k) +
-                         dq * weight * u(i, j - dj, k) +
-                         dr * weight * u(i, j, k - dk);
-          }
-        }
-      }
-    }
-  }
-}
-void Simulation::sweep_v(int i0, int i1, int j0, int j1, int k0, int k1) {
-  int di = (i0 < i1) ? 1 : -1;
-  int dj = (j0 < j1) ? 1 : -1;
-  int dk = (k0 < k1) ? 1 : -1;
-
-  float weight;
-
-  for (int i = i0; i != i1; i += di) {
-    for (int j = j0; j != j1; j += dj) {
-      for (int k = k0; k != k1; k += dk) {
-        if (liquid_phi(i, j - 1, k) > 0 && liquid_phi(i, j, k) > 0) {
-          float dq = dj * (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k));
-          if (dq < 0)
-            continue;
-          // avg x-dir phi change
-          float dp =
-              0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
-                     liquid_phi(i - di, j - 1, k) - liquid_phi(i - di, j, k));
-          if (dp < 0)
-            continue;
-          // avg z-dir phi change
-          float dr = 0.5 * (liquid_phi(i - 1, j - 1, k) + liquid_phi(i, j, k) -
-                            liquid_phi(i - 1, j - 1, k - dk) -
-                            liquid_phi(i, j, k - dk));
-          if (dr < 0)
-            continue;
-
-          // weighted sum of other velocities
-          if (dp + dq + dr == 0) {
-            weight = 1.0f / 3.0f;
-            v(i, j, k) =
-                weight * (v(i - di, j, k) + v(i, j - dj, k) + v(i, j, k - dk));
-          } else {
-            weight = 1.0f / (dp + dq + dr);
-            v(i, j, k) = dp * weight * v(i - di, j, k) +
-                         dq * weight * v(i, j - dj, k) +
-                         dr * weight * v(i, j, k - dk);
-          }
-        }
-      }
-    }
-  }
-}
-
-void Simulation::sweep_w(int i0, int i1, int j0, int j1, int k0, int k1) {
-  int di = (i0 < i1) ? 1 : -1;
-  int dj = (j0 < j1) ? 1 : -1;
-  int dk = (k0 < k1) ? 1 : -1;
-
-  float weight;
-
-  for (int i = i0; i != i1; i += di) {
-    for (int j = j0; j != j1; j += dj) {
-      for (int k = k0; k != k1; k += dk) {
-        if (liquid_phi(i, j, k - 1) > 0 && liquid_phi(i, j, k) > 0) {
-          float dr = dk * (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1));
-          if (dr < 0)
-            continue;
-          // avg y-dir phi change
-          float dq = 0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
-                            liquid_phi(i, j - dj, k - dk) -
-                            liquid_phi(i, j - 1, k - dk));
-          if (dq < 0)
-            continue;
-          // avg x-dir phi change
-          float dp = 0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
-                            liquid_phi(i - 1, j - 1, k - dk) -
-                            liquid_phi(i - 1, j, k - dk));
-          if (dp < 0)
-            continue;
-
-          // weighted sum of other velocities
-          if (dp + dq + dr == 0) {
-            weight = 1.0f / 3.0f;
-            w(i, j, k) =
-                weight * (w(i - di, j, k) + w(i, j - dj, k) + w(i, j, k - dk));
-          } else {
-            weight = 1.0f / (dp + dq + dr);
-            w(i, j, k) = dp * weight * w(i - di, j, k) +
-                         dq * weight * w(i, j - dj, k) +
-                         dr * weight * w(i, j, k - dk);
-          }
-        }
-      }
-    }
-  }
-}
+//         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j, k - 1) > 0) &&
+//             (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)) {
+//           w(i, j, k) -= (dt / (density_1 * h)) *
+//                         (pressure(i, j, k) - pressure(i, j, k - 1));
+//         }
+//       }
+//     }
+//   }
+// }
 
 // advance the simulation by a given time
 // the time will be split up into substeps
@@ -804,9 +617,6 @@ void Simulation::advance(float dt) {
     add_gravity(substep);
 
     enforce_boundaries();
-    project(substep);
-    // enforce_boundaries();
-    extend_velocity();
-    // enforce_boundaries();
+    // project(substep);
   }
 }

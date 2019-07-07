@@ -1,26 +1,33 @@
 #include "simulation.h"
 
-void Simulation::add_pool_phi() {
-  for (int i = 0; i < nx; i++) {
-    for (int j = 0; j < ny; j++) {
-      for (int k = 0; k < nz; k++) {
-        liquid_phi(i, j, k) =
-            std::min(liquid_phi(i, j, k), (h * j) - (0.5f * ly));
-      }
-    }
-  }
+void Simulation::add_fluid(float density_) {
+  fluids.push_back(Fluid(density_, nx, ny, nz));
 }
 
+// void Simulation::add_pool_phi() {
+//   for (int i = 0; i < nx; i++) {
+//     for (int j = 0; j < ny; j++) {
+//       for (int k = 0; k < nz; k++) {
+//         liquid_phi(i, j, k) =
+//             std::min(liquid_phi(i, j, k), (h * j) - (0.5f * ly));
+//       }
+//     }
+//   }
+// }
+
 void Simulation::add_sphere_phi() {
+  fluids.clear();
+  add_fluid(2.0f);
+  add_fluid(1.0f);
   // create a sphere with radius of 1/4 container size
   glm::vec3 center(0.5f * (nx)*h, 0.5f * (ny)*h, 0.5f * (nz)*h);
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) =
-            std::min(liquid_phi(i, j, k),
-                     glm::distance(center, position) - (lx * 0.35f));
+        float phi_val = glm::distance(center, position) - (lx * 0.35f);
+        fluids[0].phi(i, j, k) = phi_val;
+        fluids[1].phi(i, j, k) = -phi_val;
       }
     }
   }
@@ -33,21 +40,21 @@ static inline float sdCapsule(glm::vec3 p, glm::vec3 a, glm::vec3 b, float r) {
   return glm::length(pa - ba * h) - r;
 }
 
-void Simulation::add_cylinder_phi() {
-  glm::vec3 a(h * (nx * 0.35f + 0.5f), h * (nx * 0.5f + 0.5f),
-              h * (nz * 0.5f + 0.5f));
-  glm::vec3 b(h * (nx * 0.65f + 0.5f), h * (nx * 0.5f + 0.5f),
-              h * (nz * 0.5f + 0.5f));
-  float r = lx * 0.25f;
-  for (int i = 0; i < nx; i++) {
-    for (int j = 0; j < ny; j++) {
-      for (int k = 0; k < nz; k++) {
-        glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) = sdCapsule(position, a, b, r);
-      }
-    }
-  }
-}
+// void Simulation::add_cylinder_phi() {
+//   glm::vec3 a(h * (nx * 0.35f + 0.5f), h * (nx * 0.5f + 0.5f),
+//               h * (nz * 0.5f + 0.5f));
+//   glm::vec3 b(h * (nx * 0.65f + 0.5f), h * (nx * 0.5f + 0.5f),
+//               h * (nz * 0.5f + 0.5f));
+//   float r = lx * 0.25f;
+//   for (int i = 0; i < nx; i++) {
+//     for (int j = 0; j < ny; j++) {
+//       for (int k = 0; k < nz; k++) {
+//         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
+//         liquid_phi(i, j, k) = sdCapsule(position, a, b, r);
+//       }
+//     }
+//   }
+// }
 
 void Simulation::set_vortex_field() {
   // predefined_field = true;

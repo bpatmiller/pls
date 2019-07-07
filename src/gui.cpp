@@ -7,6 +7,7 @@ const glm::vec3 UP(0, 1, 0);
 void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   // set up simulation
   simulation.init(lx_, nx_, ny_, nz_);
+  simulation.add_sphere_phi();
 
   // compile shaders
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");
@@ -21,7 +22,7 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   particle_vao.setLayout({3}, false);
   particle_vao.setLayout({3, 1, 1, 1, 1}, true);
   particle_vao.vb.set(sphere_vertices);
-  particle_vao.ib.set(simulation.particles);
+  particle_vao.ib.set(simulation.fluids[0].particles);
 
   std::vector<glm::vec3> box_vertices = {
       {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f},
@@ -34,12 +35,12 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   }
 
   // add grid cells
-  grid_offsets.resize(simulation.liquid_phi.size);
+  grid_offsets.resize(simulation.fluids[0].phi.size);
   int fcc = 0;
-  for (int i = 0; i < simulation.liquid_phi.sx; i++) {
-    for (int j = 0; j < simulation.liquid_phi.sy; j++) {
-      for (int k = 0; k < simulation.liquid_phi.sz; k++) {
-        if (simulation.liquid_phi(i, j, k) < 0) {
+  for (int i = 0; i < simulation.fluids[0].phi.sx; i++) {
+    for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
+      for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
+        if (simulation.fluids[0].phi(i, j, k) < 0) {
           grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 1.0f);
         } else {
           grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k, 0.0f);
@@ -63,15 +64,15 @@ void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   std::vector<glm::vec3> vel_vertices = {
       {-0.005f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.005f, 0.0f, 0.0f}};
   vel_indices = {{0, 1, 2}};
-  vel_offsets.resize(simulation.liquid_phi.size);
-  for (int i = 0; i < simulation.liquid_phi.sx; i++) {
-    for (int j = 0; j < simulation.liquid_phi.sy; j++) {
-      for (int k = 0; k < simulation.liquid_phi.sz; k++) {
+  vel_offsets.resize(simulation.fluids[0].phi.size);
+  for (int i = 0; i < simulation.fluids[0].phi.sx; i++) {
+    for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
+      for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
         glm::vec3 p =
             glm::vec3(h * i + 0.5f * h, h * j + 0.5f * h, h * k + 0.5f * h);
-        vel_offsets[i + (simulation.liquid_phi.sx * j) +
-                    (simulation.liquid_phi.sx * simulation.liquid_phi.sy * k)] =
-            {p, glm::vec3(0)}; // simulation.trilerp_uvw(p)};
+        vel_offsets[i + (simulation.fluids[0].phi.sx * j) +
+                    (simulation.fluids[0].phi.sx * simulation.fluids[0].phi.sy *
+                     k)] = {p, glm::vec3(0)}; // simulation.trilerp_uvw(p)};
       }
     }
   }
@@ -144,12 +145,12 @@ void GUI::update(float t, bool force) {
     // update grid vao
     float h = simulation.h;
     int fcc = 0;
-    for (int i = 0; i < simulation.liquid_phi.sx; i++) {
-      for (int j = 0; j < simulation.liquid_phi.sy; j++) {
-        for (int k = 0; k < simulation.liquid_phi.sz; k++) {
+    for (int i = 0; i < simulation.fluids[0].phi.sx; i++) {
+      for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
+        for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
           if (display_phi)
-            grid_offsets[fcc] =
-                glm::vec4(h * i, h * j, h * k, simulation.liquid_phi(i, j, k));
+            grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k,
+                                          simulation.fluids[0].phi(i, j, k));
           else
             grid_offsets[fcc] =
                 glm::vec4(h * i, h * j, h * k, simulation.pressure(i, j, k));
@@ -162,23 +163,24 @@ void GUI::update(float t, bool force) {
 
     float offs = simulation.h * 0.5;
     // update vao
-    for (int i = 0; i < simulation.liquid_phi.sx; i++) {
-      for (int j = 0; j < simulation.liquid_phi.sy; j++) {
-        for (int k = 0; k < simulation.liquid_phi.sz; k++) {
+    for (int i = 0; i < simulation.fluids[0].phi.sx; i++) {
+      for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
+        for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
           glm::vec3 p =
               glm::vec3(simulation.h * i + offs, simulation.h * j + offs,
                         simulation.h * k + offs);
 
-          vel_offsets[i + (simulation.liquid_phi.sx * j) +
-                      (simulation.liquid_phi.sx * simulation.liquid_phi.sy * k)]
-                     [1] = simulation.trilerp_uvw(p);
+          vel_offsets[i + (simulation.fluids[0].phi.sx * j) +
+                      (simulation.fluids[0].phi.sx *
+                       simulation.fluids[0].phi.sy * k)][1] =
+              simulation.trilerp_uvw(p);
         }
       }
     }
     velocity_vao.ib.update(vel_offsets, 0);
 
     particle_vao.setLayout({3, 1, 1, 1, 1}, true);
-    particle_vao.ib.set(simulation.particles);
+    particle_vao.ib.set(simulation.fluids[0].particles);
   }
 
   // draw velocity field
@@ -190,7 +192,7 @@ void GUI::update(float t, bool force) {
     velocity_vao.bind();
     glDrawElementsInstanced(GL_TRIANGLES, vel_indices.size() * 3,
                             GL_UNSIGNED_INT, vel_indices.data(),
-                            simulation.liquid_phi.size);
+                            simulation.fluids[0].phi.size);
   }
 
   // draw grid
@@ -215,7 +217,7 @@ void GUI::update(float t, bool force) {
     particle_vao.bind();
     glDrawElementsInstanced(GL_TRIANGLES, sphere_indices.size() * 3,
                             GL_UNSIGNED_INT, sphere_indices.data(),
-                            simulation.particles.size());
+                            simulation.fluids[0].particles.size());
   }
 }
 
