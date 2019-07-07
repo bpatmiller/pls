@@ -73,6 +73,17 @@ template <class T> struct Array3 {
     rhs.data.assign(data.begin(), data.end());
   }
 
+  void clamp(T min, T max) {
+    assert(min < max);
+    for (auto &d : data) {
+      if (d < min) {
+        d = min;
+      } else if (d > max) {
+        d = max;
+      }
+    }
+  }
+
   void print() {
     for (int k = 0; k < sz; k++) {
       std::printf("z = %i\n", k);
