@@ -94,6 +94,7 @@ public:
   float CFL();
   // initialization methods
   void add_sphere_phi();
+  void add_pool_phi();
   void add_cylinder_phi();
   void set_vortex_field();
   // auxillary methods

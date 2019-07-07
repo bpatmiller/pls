@@ -1,5 +1,15 @@
 #include "simulation.h"
 
+void Simulation::add_pool_phi() {
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        liquid_phi(i, j, k) = (h * ny) - (0.25f * ly);
+      }
+    }
+  }
+}
+
 void Simulation::add_sphere_phi() {
   // create a sphere with radius of 1/4 container size
   glm::vec3 center(0.25f * nx * h, 0.5f * ny * h, 0.5f * nz * h);

@@ -83,6 +83,7 @@ template <class T> struct Array3 {
         std::cout << "\n\n";
       }
     }
+    std::cout << "--------\n";
   }
 
   T &operator()(int i, int j, int k) {
@@ -93,17 +94,7 @@ template <class T> struct Array3 {
   }
 
   T &operator()(glm::ivec3 index) { return (*this)(index.x, index.y, index.z); }
-
-  // copy constructor
-  Array3<T>(const Array3<T> &rhs) {
-    // require they be of the same size if already initialized
-    assert(size == rhs.size);
-
-    for (int i = 0; i < size; i++) {
-      data[i] = rhs.data[i];
-    }
-  }
-
+  
   // ARRAY3<T> OPERATORS
 
   Array3<T> operator+(const Array3<T> &rhs) {

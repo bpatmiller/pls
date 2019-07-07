@@ -84,8 +84,6 @@ int main(int argc, char *argv[]) {
   }
 }
 
-void test() { test_array3(); }
-
 void test_array3() {
   std::cout << "TESTING ARRAY3 FUNCTIONS/OPERATORS\n";
   Array3f f(2, 2, 2);
@@ -96,7 +94,10 @@ void test_array3() {
   Array3f mis(2, 2, 2);
   mis.set(3);
   f = mis;
+  // check that its not just a shallow copy
+  mis.set(2);
   f.print();
+  mis.set(3);
 
   // addition
   f.set(2);

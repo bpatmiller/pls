@@ -738,11 +738,12 @@ void Simulation::compute_volume_fractions_arr(Array3f &vol, Array3f &field,
               glm::vec3 position = glm::vec3(subx, suby, subz) + base_position;
               float phi_val = trilerp_scalar_field(liquid_phi, position);
               // bridson 6.4
-              sum_fractions += 0.5f - 0.5f * glm::clamp(4 * phi_val / h, -1.0f, 1.0f);
+              sum_fractions +=
+                  0.5f - 0.5f * glm::clamp(4 * phi_val / h, -1.0f, 1.0f);
             }
           }
         }
-        vol(i, j, k) = std::max(sum_fractions / num_subcells,1e-3f);
+        vol(i, j, k) = std::max(sum_fractions / num_subcells, 1e-3f);
       }
     }
   }
