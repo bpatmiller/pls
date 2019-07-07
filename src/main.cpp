@@ -75,10 +75,11 @@ int main(int argc, char *argv[]) {
   glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
   gui.init(2.0f, 25, 25, 25);
-  gui.simulation.add_pool_phi();
-  // gui.simulation.add_sphere_phi();
+  gui.simulation.liquid_phi.set(100.0f);
+  // gui.simulation.add_pool_phi();
+  gui.simulation.add_sphere_phi();
   while (!glfwWindowShouldClose(window)) {
-    gui.update();
+    gui.update(0.025f, true);
     glfwSwapBuffers(window);
     glfwPollEvents();
   }

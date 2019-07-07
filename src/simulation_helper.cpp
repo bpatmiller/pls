@@ -4,7 +4,8 @@ void Simulation::add_pool_phi() {
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
-        liquid_phi(i, j, k) = (h * j) - (0.5f * ly);
+        liquid_phi(i, j, k) =
+            std::min(liquid_phi(i, j, k), (h * j) - (0.5f * ly));
       }
     }
   }
@@ -17,7 +18,9 @@ void Simulation::add_sphere_phi() {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        liquid_phi(i, j, k) = glm::distance(center, position) - (lx * 0.35f);
+        liquid_phi(i, j, k) =
+            std::min(liquid_phi(i, j, k),
+                     glm::distance(center, position) - (lx * 0.35f));
       }
     }
   }
