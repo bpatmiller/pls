@@ -57,7 +57,7 @@ public:
   Array3d pressure;
   Array3d divergence;
   int reseed_counter;
-  Array3u grid_ids;
+  Array3i grid_ids;
   Array3i fl_index;
   float fixed_density = 1.0f;
 

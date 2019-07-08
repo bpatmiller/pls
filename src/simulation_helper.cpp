@@ -18,6 +18,7 @@ void Simulation::add_pool_phi() {
       }
     }
   }
+  enforce_boundaries();
 }
 
 void Simulation::add_sphere_phi() {
@@ -109,8 +110,11 @@ void Simulation::intialize_boundaries() {
       solid_phi(i, j, 1) = -0.5f * h;
     }
   }
-  // TODO reinit solid phi?
-  // reinitialize_phi(solid_phi);
+
+  Fluid f(0.0, nx, ny, nz);
+  f.phi = solid_phi;
+  reinitialize_phi(f);
+  solid_phi = f.phi;
 }
 
 // given a position, return the trilinear interpolation

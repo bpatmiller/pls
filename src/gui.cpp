@@ -7,8 +7,8 @@ const glm::vec3 UP(0, 1, 0);
 void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   // set up simulation
   simulation.init(lx_, nx_, ny_, nz_);
-  // simulation.add_sphere_phi();
-  simulation.add_pool_phi();
+  simulation.add_sphere_phi();
+  // simulation.add_pool_phi();
 
   // compile shaders
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");

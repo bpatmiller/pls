@@ -6,7 +6,7 @@
 
 const std::vector<glm::ivec3> neighbor_offsets = {
     glm::ivec3(-1, 0, 0), glm::ivec3(1, 0, 0),  glm::ivec3(0, -1, 0),
-    glm::ivec3(1, 0, 0),  glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1)};
+    glm::ivec3(0, 1, 0),  glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1)};
 
 const std::vector<glm::ivec3> update_offsets = {
     glm::ivec3(-1, 0, 0), glm::ivec3(0, -1, 0), glm::ivec3(0, 0, -1)};
@@ -308,9 +308,9 @@ void Simulation::reinitialize_phi(Fluid &fluid) {
     // std::cout << "err:" << err << "\n";
 
     if (err < tol) {
-      // std::printf(
-      //     "phi successfully reinitialized with error %f < %f in %i
-      //     iterations\n", err, tol, iter);
+      // std::printf("phi successfully reinitialized with error %f < %f in %i "
+      //             "iterations\n",
+      //             err, tol, iter);
       break;
     }
   }
@@ -505,7 +505,7 @@ void Simulation::project_phi() {
 void Simulation::project(float dt) {
   compute_divergence();
   solve_pressure(dt);
-  // apply_pressure_gradient(dt);
+  apply_pressure_gradient(dt);
 }
 
 // compute negative divergence to be used in rhs of pressure solve
@@ -521,24 +521,26 @@ void Simulation::compute_divergence() {
   }
 }
 
-int Simulation::ijk_to_index(int i, int j, int k) {
-  return i + (nx * j) + (nx * ny * k);
-}
+// int Simulation::ijk_to_index(int i, int j, int k) {
+//   return i + (nx * j) + (nx * ny * k);
+// }
 
-static inline float compute_theta(float phi1, float phi2) {
-  return std::abs(phi1) / (std::abs(phi1) + std::abs(phi2));
-}
+// static inline float compute_theta(float phi1, float phi2) {
+//   return std::abs(phi1) / (std::abs(phi1) + std::abs(phi2));
+// }
 
 void Simulation::solve_pressure(float dt) {
   // find the fluid id of each grid point
   int nf = 0;
-  grid_ids.clear();
-  fl_index.set(-1.0f);
+  grid_ids.clear();  // grid ids maps each grid point to a given level fluid
+  fl_index.set(-10); // the fl index array gives a 0-n index to each fluid voxel
+                     // a solid/zero density voxel has a fl index of -10
+
   for (int i = 0; i < grid_ids.size; i++) {
     // find argmin phi
     float phi_min = (nx + ny + nz) * h;
     uint phi_argmin = 0;
-    for (uint fl = 0; fl < fluids.size(); fl++) {
+    for (int fl = 0; fl < (int)fluids.size(); fl++) {
       if (fluids[fl].phi.data[i] < phi_min) {
         phi_min = fluids[fl].phi.data[i];
         phi_argmin = fl;
@@ -566,7 +568,7 @@ void Simulation::solve_pressure(float dt) {
           continue;
 
         int location_index = fl_index(i, j, k);
-        float center_coef = 0.0f;
+        double center_coef = 0.0f;
 
         for (auto &offs : neighbor_offsets) {
           // if neighbor is nonsolid
@@ -574,7 +576,7 @@ void Simulation::solve_pressure(float dt) {
             center_coef += dt / (fixed_density * h * h);
             // if neighbor is a nonzero density fluid
             if (fl_index(i + offs.x, j + offs.y, k + offs.z) >= 0) {
-              float neighbor_coef = -dt / (fixed_density * h * h);
+              double neighbor_coef = -dt / (fixed_density * h * h);
               tripletList.push_back(Eigen::Triplet<double>(
                   location_index, fl_index(i + offs.x, j + offs.y, k + offs.z),
                   neighbor_coef));
@@ -592,9 +594,14 @@ void Simulation::solve_pressure(float dt) {
 
   // construct b
   Eigen::VectorXd b(nf);
-  for (int i = 0; i < divergence.size; i++) {
-    if (fl_index.data[i] >= 0)
-      b(fl_index.data[i]) = (-1.0f / h) * divergence.data[i];
+  for (int i = 0; i < divergence.sx; i++) {
+    for (int j = 0; j < divergence.sy; j++) {
+      for (int k = 0; k < divergence.sz; k++) {
+        if (fl_index(i, j, k) >= 0) {
+          b(fl_index(i, j, k)) = (-1.0 / h) * divergence(i, j, k);
+        }
+      }
+    }
   }
 
   // solve Ax=b
@@ -609,9 +616,14 @@ void Simulation::solve_pressure(float dt) {
 
   // set pressure
   pressure.clear();
-  for (int i = 0; i < pressure.size; i++) {
-    if (fl_index.data[i] >= 0)
-      pressure.data[i] = x(fl_index.data[i]);
+  for (int i = 0; i < fl_index.sx; i++) {
+    for (int j = 0; j < fl_index.sy; j++) {
+      for (int k = 0; k < fl_index.sz; k++) {
+        if (fl_index(i, j, k) >= 0) {
+          pressure(i, j, k) = x(fl_index(i, j, k));
+        }
+      }
+    }
   }
 }
 
@@ -888,5 +900,6 @@ void Simulation::advance(float dt) {
     enforce_boundaries();
     project(substep); // TODO
     extend_velocity();
+    enforce_boundaries();
   }
 }
