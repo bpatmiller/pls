@@ -2,3 +2,6 @@
     - phi, phi+, phi-
     - particle vector
     - density
+    
+## todo list
+    - ignore 0 density fluids in phi projection

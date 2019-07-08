@@ -185,6 +185,7 @@ void Simulation::intialize_boundaries() {
 // given a position, return the trilinear interpolation
 // of the velocity field at that position
 glm::vec3 Simulation::trilerp_tutvtw(glm::vec3 p) {
+  p = glm::clamp(p, 0.0001f * h, lx - (1.0001f * h));
   glm::ivec3 index;
   glm::vec3 coords;
   glm::vec3 result;
@@ -201,6 +202,7 @@ glm::vec3 Simulation::trilerp_tutvtw(glm::vec3 p) {
 }
 
 glm::vec3 Simulation::trilerp_uvw(glm::vec3 p) {
+  p = glm::clamp(p, 0.5001f * h, lx - (0.5001f * h));
   glm::ivec3 index;
   glm::vec3 coords;
   glm::vec3 result;
@@ -220,6 +222,8 @@ glm::vec3 Simulation::trilerp_uvw(glm::vec3 p) {
 // use offset = glm::vec3(0) for values sampled at center
 void Simulation::position_to_grid(glm::vec3 p, glm::vec3 offset,
                                   glm::ivec3 &index, glm::vec3 &coords) {
+
+  // p = glm::clamp(p, 0.5001f * h, lx - (0.5001f * h));
 
   float nx = (p.x / h) - 0.5f + offset.x;
   float ny = (p.y / h) - 0.5f + offset.y;

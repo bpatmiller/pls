@@ -98,9 +98,12 @@ template <class T> struct Array3 {
   }
 
   T &operator()(int i, int j, int k) {
-    assert(i >= 0 and i <= sx);
-    assert(j >= 0 and j <= sy);
-    assert(k >= 0 and k <= sz);
+    if (i < 0 or i >= sx or j < 0 or j >= sy or k < 0 or k >= sz) {
+      std::printf("(i,j,k):(%i,%i,%i)\n", i, j, k);
+    }
+    assert(i >= 0 and i < sx);
+    assert(j >= 0 and j < sy);
+    assert(k >= 0 and k < sz);
     return data[i + (sx * j) + (sx * sy * k)];
   }
 
@@ -228,7 +231,7 @@ template <class T> struct Array3 {
     // x
     if (i == 0) {
       grad.x = ((*this)(i + 1, j, k) - c);
-    } else if (i == sx) {
+    } else if (i >= sx - 1) {
       grad.x = (c - (*this)(i - 1, j, k));
     } else if (v.x < 0) {
       grad.x = ((*this)(i + 1, j, k) - c);
@@ -238,7 +241,7 @@ template <class T> struct Array3 {
     // y
     if (j == 0) {
       grad.y = ((*this)(i, j + 1, k) - c);
-    } else if (j == sy) {
+    } else if (j >= sy - 1) {
       grad.y = (c - (*this)(i, j - 1, k));
     } else if (v.y < 0) {
       grad.y = ((*this)(i, j + 1, k) - c);
@@ -248,7 +251,7 @@ template <class T> struct Array3 {
     // z
     if (k == 0) {
       grad.z = ((*this)(i, j, k + 1) - c);
-    } else if (k == sz) {
+    } else if (k >= sz - 1) {
       grad.z = (c - (*this)(i, j, k - 1));
     } else if (v.z < 0) {
       grad.z = ((*this)(i, j, k + 1) - c);

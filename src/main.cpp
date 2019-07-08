@@ -1,5 +1,6 @@
 #include <glad/glad.h>
 
+#include "geom.h"
 #include "gui.h"
 #include <GLFW/glfw3.h>
 #include <getopt.h>
@@ -61,34 +62,49 @@ void MousePosCallback(GLFWwindow *window, double mouse_x, double mouse_y) {
 }
 
 int main(int argc, char *argv[]) {
-  // test_array3();
+  bool graphical = false;
 
-  // create window/init glfw
-  glfwSetErrorCallback(glfw_error_callback);
-  if (!glfwInit())
-    exit(EXIT_FAILURE);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-  GLFWwindow *window = glfwCreateWindow(640, 480, "apic", NULL, NULL);
-  if (!window) {
-    throw std::runtime_error("glfwCreateWindow error");
-  }
-  glfwMakeContextCurrent(window);
-  gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-  glfwSwapInterval(1);
-  GUI gui(window);
-  glfwSetWindowUserPointer(window, &gui);
-  // key / mouse callbacks
-  glfwSetKeyCallback(window, KeyCallback);
-  glfwSetCursorPosCallback(window, MousePosCallback);
-  glfwSetMouseButtonCallback(window, MouseButtonCallback);
+  if (graphical) {
+    // create window/init glfw
+    glfwSetErrorCallback(glfw_error_callback);
+    if (!glfwInit())
+      exit(EXIT_FAILURE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    GLFWwindow *window = glfwCreateWindow(640, 480, "apic", NULL, NULL);
+    if (!window) {
+      throw std::runtime_error("glfwCreateWindow error");
+    }
+    glfwMakeContextCurrent(window);
+    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+    glfwSwapInterval(1);
+    GUI gui(window);
+    glfwSetWindowUserPointer(window, &gui);
+    // key / mouse callbacks
+    glfwSetKeyCallback(window, KeyCallback);
+    glfwSetCursorPosCallback(window, MousePosCallback);
+    glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
-  gui.init(2.0f, 20, 20, 20);
+    gui.init(2.0f, 20, 20, 20);
 
-  while (!glfwWindowShouldClose(window)) {
-    gui.update();
-    glfwSwapBuffers(window);
-    glfwPollEvents();
+    while (!glfwWindowShouldClose(window)) {
+      gui.update();
+      glfwSwapBuffers(window);
+      glfwPollEvents();
+    }
+  } else {
+    std::printf("Using headless mode\n");
+    int n_dim = 30;
+    Simulation simulation(2.0f, n_dim, n_dim, n_dim);
+    simulation.add_two_spheres();
+    float time = 0.0f;
+    float goal_time = 1.0f;
+    float timestep = 0.25f;
+    while (time < goal_time) {
+      simulation.advance(timestep);
+      time += timestep;
+      simulation.export_mesh(time);
+    }
   }
 }
 

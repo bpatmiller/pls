@@ -46,7 +46,6 @@ void Simulation::reseed_particles() {
     reseed_counter = 1;
     remove_particles();
     initialize_particles();
-    // std::cout << "reseeding particles\n";
   }
   reseed_counter++;
 }
@@ -83,8 +82,11 @@ void Simulation::initialize_particles(Fluid &fluid) {
                 (initial_phi_val > 0)
                     ? glm::clamp(initial_phi_val, 0.1f * h, 1.0f * h)
                     : glm::clamp(initial_phi_val, -1.0f * h, -0.1f * h);
-            glm::vec3 normal = glm::normalize(fluid.phi.gradlerp(
-                glm::ivec3(i, j, k), (position - base_position) / h, h));
+            glm::vec3 normal = fluid.phi.gradlerp(
+                glm::ivec3(i, j, k), (position - base_position) / h, h);
+            if (normal != glm::vec3(0.0f))
+              normal = glm::normalize(normal);
+
             glm::vec3 new_position =
                 glm::clamp(position + (phi_goal - initial_phi_val) * normal,
                            1.0001f * h, (nx - 1.0001f) * h);
@@ -279,8 +281,8 @@ void Simulation::reinitialize_phi(Fluid &fluid) {
 
   float err = 0;
   float tol = 1e-1f;
-  int max_iter = 250;
-  float dt = 0.05f * h;
+  int max_iter = 2000;
+  float dt = 0.1f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
       std::printf("phi reinitialization failed to converge with error %f > %f "
@@ -371,10 +373,8 @@ void Simulation::advect_phi(Fluid &fluid, float dt) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-
         glm::vec3 velocity = trilerp_uvw(position);
         glm::vec3 phi_grad = fluid.phi.upwind_gradient(i, j, k, h, velocity);
-
         fluid.phi_copy(i, j, k) =
             fluid.phi(i, j, k) - dt * glm::dot(velocity, phi_grad);
       }
@@ -666,7 +666,7 @@ void Simulation::extend_velocity() {
   for (int i = 0; i < liquid_phi.size; i++) {
     float min_phi = (nx + ny + nz) * h;
     for (auto &f : fluids) {
-      if (f.density != 0 && f.phi.data[i] < min_phi)
+      if (f.density > 0.0f && f.phi.data[i] < min_phi)
         min_phi = f.phi.data[i];
     }
     liquid_phi.data[i] = min_phi;
@@ -691,7 +691,7 @@ void Simulation::sweep_velocity() {
   sweep_velocity_boundary(u);
 
   // V --------------------------------
-  sweep_v(1, v.sx - 1, 1, v.sy - 1, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, 1, v.sy - 1, 2, v.sz - 2);
   sweep_v(1, v.sx - 1, 1, v.sy - 1, v.sz - 2, 0);
   sweep_v(1, v.sx - 1, v.sy - 2, 0, 1, v.sz - 1);
   sweep_v(1, v.sx - 1, v.sy - 2, 0, v.sz - 2, 0);
@@ -704,13 +704,13 @@ void Simulation::sweep_velocity() {
 
   // W --------------------------------
   sweep_w(1, w.sx - 1, 1, w.sy - 1, 1, w.sz - 1);
-  sweep_w(1, w.sx - 1, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(1, w.sx - 1, 1, w.sy - 1, w.sz - 3, 0);
   sweep_w(1, w.sx - 1, w.sy - 2, 0, 1, w.sz - 1);
-  sweep_w(1, w.sx - 1, w.sy - 2, 0, w.sz - 2, 0);
+  sweep_w(1, w.sx - 1, w.sy - 2, 0, w.sz - 3, 0);
   sweep_w(w.sx - 2, 0, 1, w.sy - 1, 1, w.sz - 1);
-  sweep_w(w.sx - 2, 0, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, 1, w.sy - 1, w.sz - 3, 0);
   sweep_w(w.sx - 2, 0, w.sy - 2, 0, 1, w.sz - 1);
-  sweep_w(w.sx - 2, 0, w.sy - 2, 0, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, w.sy - 2, 0, w.sz - 3, 0);
   // set boundary cells
   sweep_velocity_boundary(w);
 }
@@ -832,7 +832,6 @@ void Simulation::sweep_w(int i0, int i1, int j0, int j1, int k0, int k1) {
   int dk = (k0 < k1) ? 1 : -1;
 
   float weight;
-
   for (int i = i0; i != i1; i += di) {
     for (int j = j0; j != j1; j += dj) {
       for (int k = k0; k != k1; k += dk) {
@@ -891,14 +890,14 @@ void Simulation::advance(float dt) {
     correct_levelset();
     adjust_particle_radii();
     reseed_particles();
-
+    // correct overlaps
     project_phi();
-
+    // get intermediate velocity field
     advect_velocity(substep);
     add_gravity(substep);
-
+    // enforce incompressibility
     enforce_boundaries();
-    project(substep); // TODO
+    project(substep);
     extend_velocity();
     enforce_boundaries();
   }

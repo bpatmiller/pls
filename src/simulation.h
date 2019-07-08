@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Particle.h"
+#include "geom.h"
 #include "marchingcubes.h"
 #include "util.h"
 #include <algorithm>
@@ -68,6 +69,12 @@ public:
 
   Simulation(){};
 
+  void init();
+
+  Simulation(float lx_, int nx_, int ny_, int nz_) {
+    init(lx_, nx_, ny_, nz_);
+  };
+
   void init(float lx_, int nx_, int ny_, int nz_) {
     // set up dimension variables
     nx = nx_;
@@ -91,7 +98,7 @@ public:
     v.init(nx, ny + 1, nz);
     v_vol.init(nx, ny + 1, nz);
     w.init(nx, ny, nz + 1);
-    w_vol.init(nx, ny, nx + 1);
+    w_vol.init(nx, ny, nz + 1);
     tu.init(nx + 1, ny, nz);
     tv.init(nx, ny + 1, nz);
     tw.init(nx, ny, nz + 1);
@@ -167,4 +174,7 @@ public:
   void sweep_u(int i0, int i1, int j0, int j1, int k0, int k1);
   void sweep_v(int i0, int i1, int j0, int j1, int k0, int k1);
   void sweep_w(int i0, int i1, int j0, int j1, int k0, int k1);
+  // io methods
+  void export_mesh(float time);
+  void generate_mesh(Fluid fluid, Mesh &mesh);
 };
