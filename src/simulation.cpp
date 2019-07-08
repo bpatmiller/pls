@@ -272,12 +272,13 @@ void Simulation::reinitialize_phi(Fluid &fluid) {
 
   float err = 0;
   float tol = 1e-1f;
-  int max_iter = 50;
+  int max_iter = 250;
   float dt = 0.05f * h;
   for (int iter = 0; iter <= max_iter; iter++) {
     if (iter == max_iter)
-      // std::cout << "error: phi reinitialization did not converge\n";
-      std::cout << "error: phi reinit did not converge\n";
+      std::printf("phi reinitialization failed to converge with error %f > %f "
+                  "in %i iterations\n",
+                  err, tol, iter);
 
     // compute updated phi values for one timestep
     // liquid_phi = liquid_phi - ((sig * (norm_grad - 1.0f)) * dt);
@@ -451,26 +452,41 @@ void Simulation::enforce_boundaries() {
 }
 
 void Simulation::project_phi() {
-  for (i = 0; i < (nx * ny * nz); i++) {
+  for (int i = 0; i < (nx * ny * nz); i++) {
     // get the lowest two phi values, and subtract the avg
     // from all phi values
     // NOTE: assumes at least 2 phase flow
-    if (solid_phi.data[i] > 0) {
-      // find the lowest 2
-      float min1 = nx * ny * nz;
-      float min2 = nx * ny * nz;
-      for (auto & f : fluids) {
-        if (f.phi.data[i] < min1) {
-          min2 = min1;
-          min1 = f.phi.data[i];
-        } else if (f.phi.data[i] < min2) {
-          min2 = f.phi.data[i];
-        }
-        // now subtract the average
-        float avg = (min1 + min2) * 0.5f;
-        for (auto & f : fluids) {
-          f.phi.data[i] -= avg;
-        }
+    // find the lowest 2
+    float min1 = nx * ny * nz;
+    float min2 = nx * ny * nz;
+    for (auto &f : fluids) {
+      if (f.phi.data[i] < min1) {
+        min2 = min1;
+        min1 = f.phi.data[i];
+      } else if (f.phi.data[i] < min2) {
+        min2 = f.phi.data[i];
+      }
+    }
+
+    // assert we have two valid minima
+    if (min1 == nx * ny * nz or min2 == nx * ny * nz) {
+      std::printf("f0.phi.data[i]:%f, f1.phi.data[i]:%f\n",
+                  fluids[0].phi.data[i], fluids[1].phi.data[i]);
+      assert(min1 != nx * ny * nz and min2 != nx * ny * nz);
+    }
+
+    // now determine if this grid point needs to be projected:
+    // dont project points with exactly one negative phi
+    // if we have no negative phis in min1, min2, then clearly
+    // we have no negative phis at all. similarly, no positive phis
+    // in min1,min2 is equivalent to 2 or more negatives
+    // SO: project if min1, min2 both negative or both positive
+    // => min1 * min2 > 0
+    if (min1 * min2 > 0) {
+      // now subtract the average
+      float avg = (min1 + min2) * 0.5f;
+      for (auto &f : fluids) {
+        f.phi.data[i] -= avg;
       }
     }
   }

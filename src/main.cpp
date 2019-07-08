@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
   gui.init(2.0f, 25, 25, 25);
 
   while (!glfwWindowShouldClose(window)) {
-    gui.update(0.025f, true);
+    gui.update();
     glfwSwapBuffers(window);
     glfwPollEvents();
   }

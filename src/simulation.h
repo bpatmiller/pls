@@ -140,9 +140,9 @@ public:
 
   void enforce_boundaries();
   void project_phi(); // from Multiple Interacting Liquids
+  void project(float dt);
 
   // TODO
-  void project(float dt);
   void solve_pressure(float dt);
   void solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
                              double &aii, float dt, int i, int j, int k, int i1,
