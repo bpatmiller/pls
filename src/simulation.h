@@ -106,7 +106,10 @@ public:
   float CFL();
   // initialization methods
   void add_sphere_phi();
+  void add_two_spheres();
+  void add_two_walls();
   void add_pool_phi();
+  void add_pool_drop();
   void add_cylinder_phi();
   void set_vortex_field();
   void add_fluid(float density_);

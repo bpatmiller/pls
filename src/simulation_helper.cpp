@@ -21,11 +21,76 @@ void Simulation::add_pool_phi() {
   enforce_boundaries();
 }
 
+void Simulation::add_pool_drop() {
+  fluids.clear();
+  add_fluid(1.0f);
+  add_fluid(2.0f);
+  add_fluid(0.0f);
+
+  glm::vec3 center(0.5f * (nx)*h, 0.7f * (ny)*h, 0.5f * (nz)*h);
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
+        float phi_val_pool = (h * j) - (0.25f * ly);
+        float phi_val_sphere = glm::distance(center, position) - (lx * 0.2f);
+        fluids[0].phi(i, j, k) = phi_val_sphere;
+        fluids[1].phi(i, j, k) = phi_val_pool;
+        fluids[2].phi(i, j, k) = std::max(-phi_val_pool, -phi_val_sphere);
+      }
+    }
+  }
+  enforce_boundaries();
+}
+
+void Simulation::add_two_walls() {
+  fluids.clear();
+  add_fluid(1.0f);
+  add_fluid(2.0f);
+  add_fluid(0.0f);
+  // 0 density implies we do not include this in our computations
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        float phi_val_l = (h * i) - (0.4f * lx);
+        float phi_val_r = (lx - h * i) - (0.4f * lx);
+
+        fluids[0].phi(i, j, k) = phi_val_l;
+        fluids[1].phi(i, j, k) = phi_val_r;
+        fluids[2].phi(i, j, k) = std::max(-phi_val_l, -phi_val_r);
+      }
+    }
+  }
+  enforce_boundaries();
+}
+
+void Simulation::add_two_spheres() {
+  fluids.clear();
+  add_fluid(1.0f);
+  add_fluid(2.0f);
+  add_fluid(0.0f);
+  glm::vec3 center_l(0.3f * (nx)*h, 0.7f * (ny)*h, 0.5f * (nz)*h);
+  glm::vec3 center_r(0.7f * (nx)*h, 0.7f * (ny)*h, 0.5f * (nz)*h);
+
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
+        float phi_val_l = glm::distance(center_l, position) - (lx * 0.2f);
+        float phi_val_r = glm::distance(center_r, position) - (lx * 0.2f);
+
+        fluids[0].phi(i, j, k) = phi_val_l;
+        fluids[1].phi(i, j, k) = phi_val_r;
+        fluids[2].phi(i, j, k) = std::max(-phi_val_l, -phi_val_r);
+      }
+    }
+  }
+}
+
 void Simulation::add_sphere_phi() {
   fluids.clear();
   add_fluid(1.0f);
-  add_fluid(
-      0.0f); // 0 density implies we do not include this in our computations
+  add_fluid(0.0f);
   // create a sphere with radius of 1/4 container size
   glm::vec3 center(0.5f * (nx)*h, 0.5f * (ny)*h, 0.5f * (nz)*h);
   for (int i = 0; i < nx; i++) {

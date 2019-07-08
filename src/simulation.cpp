@@ -172,7 +172,7 @@ void Simulation::correct_levelset(Fluid &fluid) {
   // merge phi_+ and phi_-
   // equation 13 in PLS
   for (int i = 0; i < fluid.phi.size; i++) {
-    if (std::abs(fluid.phi_plus.data[i]) > std::abs(fluid.phi_minus.data[i])) {
+    if (std::abs(fluid.phi_plus.data[i]) >= std::abs(fluid.phi_minus.data[i])) {
       fluid.phi.data[i] = fluid.phi_minus.data[i];
     } else {
       fluid.phi.data[i] = fluid.phi_plus.data[i];
