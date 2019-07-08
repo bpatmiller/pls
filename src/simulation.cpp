@@ -683,22 +683,22 @@ void Simulation::sweep_velocity() {
   sweep_u(1, u.sx - 1, 1, u.sy - 1, u.sz - 2, 0);
   sweep_u(1, u.sx - 1, u.sy - 2, 0, 1, u.sz - 1);
   sweep_u(1, u.sx - 1, u.sy - 2, 0, u.sz - 2, 0);
-  sweep_u(u.sx - 2, 0, 1, u.sy - 1, 1, u.sz - 1);
-  sweep_u(u.sx - 2, 0, 1, u.sy - 1, u.sz - 2, 0);
-  sweep_u(u.sx - 2, 0, u.sy - 2, 0, 1, u.sz - 1);
-  sweep_u(u.sx - 2, 0, u.sy - 2, 0, u.sz - 2, 0);
+  sweep_u(u.sx - 3, 0, 1, u.sy - 1, 1, u.sz - 1);
+  sweep_u(u.sx - 3, 0, 1, u.sy - 1, u.sz - 2, 0);
+  sweep_u(u.sx - 3, 0, u.sy - 2, 0, 1, u.sz - 1);
+  sweep_u(u.sx - 3, 0, u.sy - 2, 0, u.sz - 2, 0);
   // set boundary cells
   sweep_velocity_boundary(u);
 
   // V --------------------------------
-  sweep_v(1, v.sx - 1, 1, v.sy - 1, 2, v.sz - 2);
-  sweep_v(1, v.sx - 1, 1, v.sy - 1, v.sz - 2, 0);
-  sweep_v(1, v.sx - 1, v.sy - 2, 0, 1, v.sz - 1);
-  sweep_v(1, v.sx - 1, v.sy - 2, 0, v.sz - 2, 0);
-  sweep_v(v.sx - 2, 0, 1, v.sy - 1, 1, v.sz - 1);
-  sweep_v(v.sx - 2, 0, 1, v.sy - 1, v.sz - 2, 0);
-  sweep_v(v.sx - 2, 0, v.sy - 2, 0, 1, v.sz - 1);
-  sweep_v(v.sx - 2, 0, v.sy - 2, 0, v.sz - 2, 0);
+  sweep_v(1, v.sx - 1, 1, v.sy - 2, 2, v.sz - 2);
+  sweep_v(1, v.sx - 1, 1, v.sy - 2, v.sz - 2, 0);
+  sweep_v(1, v.sx - 1, v.sy - 3, 0, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, v.sy - 3, 0, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 2, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 2, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, v.sy - 3, 0, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, v.sy - 3, 0, v.sz - 2, 0);
   // set boundary cells
   sweep_velocity_boundary(v);
 

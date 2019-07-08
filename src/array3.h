@@ -98,12 +98,27 @@ template <class T> struct Array3 {
   }
 
   T &operator()(int i, int j, int k) {
-    if (i < 0 or i >= sx or j < 0 or j >= sy or k < 0 or k >= sz) {
-      std::printf("(i,j,k):(%i,%i,%i)\n", i, j, k);
+    // if (i < 0 or i >= sx or j < 0 or j >= sy or k < 0 or k >= sz) {
+    //   std::printf("(i,j,k):(%i,%i,%i)\n", i, j, k);
+    // }
+    // assert(i >= 0 and i < sx);
+    // assert(j >= 0 and j < sy);
+    // assert(k >= 0 and k < sz);
+    if (i < 0) {
+      i = 0;
+    } else if (i >= sx) {
+      i = sx - 1;
     }
-    assert(i >= 0 and i < sx);
-    assert(j >= 0 and j < sy);
-    assert(k >= 0 and k < sz);
+    if (j < 0) {
+      j = 0;
+    } else if (j >= sy) {
+      j = sy - 1;
+    }
+    if (k < 0) {
+      k = 0;
+    } else if (k >= sz) {
+      k = sz - 1;
+    }
     return data[i + (sx * j) + (sx * sy * k)];
   }
 

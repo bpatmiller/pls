@@ -62,7 +62,7 @@ void MousePosCallback(GLFWwindow *window, double mouse_x, double mouse_y) {
 }
 
 int main(int argc, char *argv[]) {
-  bool graphical = false;
+  bool graphical = true;
 
   if (graphical) {
     // create window/init glfw
@@ -94,12 +94,12 @@ int main(int argc, char *argv[]) {
     }
   } else {
     std::printf("Using headless mode\n");
-    int n_dim = 30;
+    int n_dim = 50;
     Simulation simulation(2.0f, n_dim, n_dim, n_dim);
-    simulation.add_two_spheres();
+    simulation.add_two_walls();
     float time = 0.0f;
     float goal_time = 1.0f;
-    float timestep = 0.25f;
+    float timestep = 0.1f;
     while (time < goal_time) {
       simulation.advance(timestep);
       time += timestep;

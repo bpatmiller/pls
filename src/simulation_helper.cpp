@@ -32,7 +32,7 @@ void Simulation::add_pool_drop() {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
         glm::vec3 position((i + 0.5f) * h, (j + 0.5f) * h, (k + 0.5f) * h);
-        float phi_val_pool = (h * j) - (0.25f * ly);
+        float phi_val_pool = (h * j) - (0.35f * ly);
         float phi_val_sphere = glm::distance(center, position) - (lx * 0.2f);
         fluids[0].phi(i, j, k) = phi_val_sphere;
         fluids[1].phi(i, j, k) = phi_val_pool;
@@ -52,8 +52,10 @@ void Simulation::add_two_walls() {
   for (int i = 0; i < nx; i++) {
     for (int j = 0; j < ny; j++) {
       for (int k = 0; k < nz; k++) {
-        float phi_val_l = (h * i) - (0.4f * lx);
-        float phi_val_r = (lx - h * i) - (0.4f * lx);
+        float phi_val_l =
+            std::max((h * k) - (0.4f) * lz, (h * i) - (0.35f * lx));
+        float phi_val_r =
+            std::max((h * (nz - k)) - (0.4f) * lz, (h * i) - (0.35f * lx));
 
         fluids[0].phi(i, j, k) = phi_val_l;
         fluids[1].phi(i, j, k) = phi_val_r;
