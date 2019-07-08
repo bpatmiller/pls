@@ -450,12 +450,38 @@ void Simulation::enforce_boundaries() {
   }
 }
 
+void Simulation::project_phi() {
+  for (i = 0; i < (nx * ny * nz); i++) {
+    // get the lowest two phi values, and subtract the avg
+    // from all phi values
+    // NOTE: assumes at least 2 phase flow
+    if (solid_phi.data[i] > 0) {
+      // find the lowest 2
+      float min1 = nx * ny * nz;
+      float min2 = nx * ny * nz;
+      for (auto & f : fluids) {
+        if (f.phi.data[i] < min1) {
+          min2 = min1;
+          min1 = f.phi.data[i];
+        } else if (f.phi.data[i] < min2) {
+          min2 = f.phi.data[i];
+        }
+        // now subtract the average
+        float avg = (min1 + min2) * 0.5f;
+        for (auto & f : fluids) {
+          f.phi.data[i] -= avg;
+        }
+      }
+    }
+  }
+}
+
 // project the velocity field onto its divergence-free part
-// void Simulation::project(float dt) {
-//   compute_divergence();
-//   solve_pressure(dt);
-//   apply_pressure_gradient(dt);
-// }
+void Simulation::project(float dt) {
+  compute_divergence();
+  // solve_pressure(dt);
+  // apply_pressure_gradient(dt);
+}
 
 // compute negative divergence to be used in rhs of pressure solve
 void Simulation::compute_divergence() {
@@ -613,10 +639,12 @@ void Simulation::advance(float dt) {
     adjust_particle_radii();
     reseed_particles();
 
+    project_phi();
+
     advect_velocity(substep);
     add_gravity(substep);
 
     enforce_boundaries();
-    // project(substep);
+    project(substep); // TODO
   }
 }

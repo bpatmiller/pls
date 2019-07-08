@@ -137,9 +137,11 @@ public:
   void advect_particles(Fluid &fluid, float dt);
   void advect_phi(float dt);
   void advect_phi(Fluid &fluid, float dt);
-  // TODO
-  void project_phi(); // TODO from Multiple Interacting Liquids
+
   void enforce_boundaries();
+  void project_phi(); // from Multiple Interacting Liquids
+
+  // TODO
   void project(float dt);
   void solve_pressure(float dt);
   void solve_pressure_helper(std::vector<Eigen::Triplet<double>> &tl,
