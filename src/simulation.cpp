@@ -453,6 +453,8 @@ void Simulation::enforce_boundaries() {
 
 void Simulation::project_phi() {
   for (int i = 0; i < (nx * ny * nz); i++) {
+    if (solid_phi.data[i] <= 0)
+      continue;
     // get the lowest two phi values, and subtract the avg
     // from all phi values
     // NOTE: assumes at least 2 phase flow

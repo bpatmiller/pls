@@ -44,6 +44,7 @@ public:
   float pitch = 0;
   float yaw = 0;
 
+  int levelset_to_draw = 0;
   bool draw_grid = true;
   bool display_phi = true;
   bool draw_particles = true;

@@ -29,6 +29,10 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action,
     gui->draw_grid = !gui->draw_grid;
   } else if (key == GLFW_KEY_F && action == GLFW_RELEASE) {
     gui->display_phi = !gui->display_phi;
+  } else if (key == GLFW_KEY_MINUS && action == GLFW_RELEASE) {
+    // cycle through levelsets to draw
+    gui->levelset_to_draw =
+        (gui->levelset_to_draw + 1) % gui->simulation.fluids.size();
   }
   if (action == GLFW_PRESS) {
     gui->keyHeld[key] = true;

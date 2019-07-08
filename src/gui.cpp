@@ -149,8 +149,9 @@ void GUI::update(float t, bool force) {
       for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
         for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
           if (display_phi)
-            grid_offsets[fcc] = glm::vec4(h * i, h * j, h * k,
-                                          simulation.fluids[1].phi(i, j, k));
+            grid_offsets[fcc] =
+                glm::vec4(h * i, h * j, h * k,
+                          simulation.fluids[levelset_to_draw].phi(i, j, k));
           else
             grid_offsets[fcc] =
                 glm::vec4(h * i, h * j, h * k, simulation.pressure(i, j, k));
