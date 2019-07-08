@@ -46,6 +46,7 @@ public:
   float h;          // cell width
   // solid phi data
   Array3f solid_phi;
+  Array3f liquid_phi;
   // velocity data
   Array3f u, v, w;             // velocity field sampled at grid faces
   Array3f tu, tv, tw;          // for storing prior velocity field
@@ -56,6 +57,9 @@ public:
   Array3d pressure;
   Array3d divergence;
   int reseed_counter;
+  Array3u grid_ids;
+  Array3i fl_index;
+  float fixed_density = 1.0f;
 
   Eigen::SparseMatrix<double> A;
   Eigen::VectorXd x, b;
@@ -76,8 +80,11 @@ public:
     reseed_counter = 0;
     // initialize arrays
     solid_phi.init(nx, ny, nz);
+    liquid_phi.init(nx, ny, nz);
     pressure.init(nx, ny, nz);
     divergence.init(nx, ny, nz);
+    grid_ids.init(nx, ny, nz);
+    fl_index.init(nx, ny, nz);
 
     u.init(nx + 1, ny, nz);
     u_vol.init(nx + 1, ny, nz);
@@ -109,6 +116,7 @@ public:
   void advance(float dt);
   glm::vec3 rk2(glm::vec3 position, float dt);
   float trilerp_scalar_field(Array3f &field, glm::vec3 position);
+  int ijk_to_index(int i, int j, int k);
   void norm_gradient(Fluid &fluid);
   // particle functions
   void position_to_grid(glm::vec3 p, glm::vec3 offset, glm::ivec3 &index,
@@ -148,4 +156,12 @@ public:
                              double &aii, float dt, int i, int j, int k, int i1,
                              int j1, int k1);
   void apply_pressure_gradient(float dt);
+
+  // velocity extrapolation
+  void extend_velocity();
+  void sweep_velocity();
+  void sweep_velocity_boundary(Array3f &arr);
+  void sweep_u(int i0, int i1, int j0, int j1, int k0, int k1);
+  void sweep_v(int i0, int i1, int j0, int j1, int k0, int k1);
+  void sweep_w(int i0, int i1, int j0, int j1, int k0, int k1);
 };

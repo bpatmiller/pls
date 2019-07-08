@@ -7,7 +7,8 @@ const glm::vec3 UP(0, 1, 0);
 void GUI::init(float lx_, int nx_, int ny_, int nz_) {
   // set up simulation
   simulation.init(lx_, nx_, ny_, nz_);
-  simulation.add_sphere_phi();
+  // simulation.add_sphere_phi();
+  simulation.add_pool_phi();
 
   // compile shaders
   grid_program = Program("src/shaders/grid.vs", "", "src/shaders/grid.fs", "");
@@ -141,21 +142,23 @@ void GUI::update(float t, bool force) {
   // step the simulation, copy the new particle data
   if (keyHeld[GLFW_KEY_P] || force) {
     simulation.advance(t);
-
+    dirty = true;
+  }
+  if (dirty) {
     // update grid vao
     float h = simulation.h;
     int fcc = 0;
     for (int i = 0; i < simulation.fluids[0].phi.sx; i++) {
       for (int j = 0; j < simulation.fluids[0].phi.sy; j++) {
         for (int k = 0; k < simulation.fluids[0].phi.sz; k++) {
-          if (display_phi)
+          if (display_phi) {
             grid_offsets[fcc] =
                 glm::vec4(h * i, h * j, h * k,
                           simulation.fluids[levelset_to_draw].phi(i, j, k));
-          else
+          } else {
             grid_offsets[fcc] =
                 glm::vec4(h * i, h * j, h * k, simulation.pressure(i, j, k));
-
+          }
           fcc++;
         }
       }
@@ -220,6 +223,8 @@ void GUI::update(float t, bool force) {
                             GL_UNSIGNED_INT, sphere_indices.data(),
                             simulation.fluids[0].particles.size());
   }
+
+  dirty = false;
 }
 
 void GUI::create_sphere(float Radius, std::vector<glm::vec3> &s_vertices) {

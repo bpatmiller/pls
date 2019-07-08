@@ -4,6 +4,13 @@
 // simulation steps
 // ----------------
 
+const std::vector<glm::ivec3> neighbor_offsets = {
+    glm::ivec3(-1, 0, 0), glm::ivec3(1, 0, 0),  glm::ivec3(0, -1, 0),
+    glm::ivec3(1, 0, 0),  glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1)};
+
+const std::vector<glm::ivec3> update_offsets = {
+    glm::ivec3(-1, 0, 0), glm::ivec3(0, -1, 0), glm::ivec3(0, 0, -1)};
+
 // returns a safe timestep
 float Simulation::CFL() {
   float max_v =
@@ -497,7 +504,7 @@ void Simulation::project_phi() {
 // project the velocity field onto its divergence-free part
 void Simulation::project(float dt) {
   compute_divergence();
-  // solve_pressure(dt);
+  solve_pressure(dt);
   // apply_pressure_gradient(dt);
 }
 
@@ -514,126 +521,342 @@ void Simulation::compute_divergence() {
   }
 }
 
-// void Simulation::solve_pressure_helper(std::vector<Eigen::Triplet<double>>
-// &tl,
-//                                        double &aii, float dt, int i, int j,
-//                                        int k, int i1, int j1, int k1) {
-//   if (solid_phi(i1, j1, k1) > 0) {
-//     aii += 1;
-//     if (liquid_phi(i1, j1, k1) <= 0) {
-//       double scale = dt / (density_1 * h * h);
-//       tl.push_back(Eigen::Triplet<double>(fluid_index(i, j, k),
-//                                           fluid_index(i1, j1, k1), -scale));
-//     }
-//   }
-// }
+int Simulation::ijk_to_index(int i, int j, int k) {
+  return i + (nx * j) + (nx * ny * k);
+}
 
-// void Simulation::solve_pressure(float dt) {
-//   int nf = 0; // total number of fluid cells
+static inline float compute_theta(float phi1, float phi2) {
+  return std::abs(phi1) / (std::abs(phi1) + std::abs(phi2));
+}
 
-//   // assign an index to each fluid cell
-//   fluid_index.clear();
-//   for (int i = 0; i < fluid_index.sx; i++) {
-//     for (int j = 0; j < fluid_index.sy; j++) {
-//       for (int k = 0; k < fluid_index.sz; k++) {
-//         if (liquid_phi(i, j, k) <= 0) {
-//           fluid_index(i, j, k) = nf;
-//           nf += 1;
-//         }
-//       }
-//     }
-//   }
+void Simulation::solve_pressure(float dt) {
+  // find the fluid id of each grid point
+  int nf = 0;
+  grid_ids.clear();
+  fl_index.set(-1.0f);
+  for (int i = 0; i < grid_ids.size; i++) {
+    // find argmin phi
+    float phi_min = (nx + ny + nz) * h;
+    uint phi_argmin = 0;
+    for (uint fl = 0; fl < fluids.size(); fl++) {
+      if (fluids[fl].phi.data[i] < phi_min) {
+        phi_min = fluids[fl].phi.data[i];
+        phi_argmin = fl;
+      }
+    }
+    grid_ids.data[i] = phi_argmin;
+    // if this is a nonzero density liquid and not in a solid cell
+    // note that fl_index also encodes whether or not the cell in question
+    // is a non-solid and non-zero density fluid
+    if (fluids[phi_argmin].density != 0 && solid_phi.data[i] > 0) {
+      fl_index.data[i] = nf;
+      nf++;
+    }
+  }
 
-//   // populate triplets
-//   std::vector<Eigen::Triplet<double>> tripletList;
-//   tripletList.reserve(nf * 7);
-//   for (int i = 0; i < divergence.sx; i++) {
-//     for (int j = 0; j < divergence.sy; j++) {
-//       for (int k = 0; k < divergence.sz; k++) {
-//         if (liquid_phi(i, j, k) <= 0) {
-//           int index = fluid_index(i, j, k);
-//           double aii = 0; // negative sum of nonsolid nbrs
-//           double scale = dt / (density_1 * h * h);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i + 1, j, k);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i - 1, j, k);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j + 1, k);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j - 1, k);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k + 1);
-//           solve_pressure_helper(tripletList, aii, dt, i, j, k, i, j, k - 1);
-//           tripletList.push_back(
-//               Eigen::Triplet<double>(index, index, aii * scale));
-//         }
-//       }
-//     }
-//   }
-//   // construct A from triplets
-//   Eigen::SparseMatrix<double> A(nf, nf);
-//   A.setFromTriplets(tripletList.begin(), tripletList.end());
+  // populate triplets
+  std::vector<Eigen::Triplet<double>> tripletList;
+  tripletList.reserve(nf * 7);
 
-//   // construct b
-//   Eigen::VectorXd b(nf);
-//   for (int i = 0; i < divergence.sx; i++) {
-//     for (int j = 0; j < divergence.sy; j++) {
-//       for (int k = 0; k < divergence.sz; k++) {
-//         if (liquid_phi(i, j, k) <= 0) {
-//           b(fluid_index(i, j, k)) = (-1.0 / h) * divergence(i, j, k);
-//         }
-//       }
-//     }
-//   }
+  for (int i = 0; i < nx; i++) {
+    for (int j = 0; j < ny; j++) {
+      for (int k = 0; k < nz; k++) {
+        // if solid or "air" (zero density fluid)
+        if (fl_index(i, j, k) < 0)
+          continue;
 
-//   // solve Ax=b
-//   Eigen::VectorXd x(nf);
-//   Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
-//   solver.compute(A);
-//   x = solver.solve(b);
+        int location_index = fl_index(i, j, k);
+        float center_coef = 0.0f;
 
-//   if (solver.info() != Eigen::Success) {
-//     throw std::runtime_error("pressure not solved");
-//   }
+        for (auto &offs : neighbor_offsets) {
+          // if neighbor is nonsolid
+          if (solid_phi(i + offs.x, j + offs.y, k + offs.z) > 0) {
+            center_coef += dt / (fixed_density * h * h);
+            // if neighbor is a nonzero density fluid
+            if (fl_index(i + offs.x, j + offs.y, k + offs.z) >= 0) {
+              float neighbor_coef = -dt / (fixed_density * h * h);
+              tripletList.push_back(Eigen::Triplet<double>(
+                  location_index, fl_index(i + offs.x, j + offs.y, k + offs.z),
+                  neighbor_coef));
+            }
+          }
+        }
+        tripletList.push_back(Eigen::Triplet<double>(
+            location_index, location_index, center_coef));
+      }
+    }
+  }
+  // construct A from triplets
+  Eigen::SparseMatrix<double> A(nf, nf);
+  A.setFromTriplets(tripletList.begin(), tripletList.end());
 
-//   // set pressure
-//   pressure.clear();
-//   for (int i = 0; i < fluid_index.sx; i++) {
-//     for (int j = 0; j < fluid_index.sy; j++) {
-//       for (int k = 0; k < fluid_index.sz; k++) {
-//         if (liquid_phi(i, j, k) <= 0) {
-//           pressure(i, j, k) = x(fluid_index(i, j, k));
-//         }
-//       }
-//     }
-//   }
-// }
+  // construct b
+  Eigen::VectorXd b(nf);
+  for (int i = 0; i < divergence.size; i++) {
+    if (fl_index.data[i] >= 0)
+      b(fl_index.data[i]) = (-1.0f / h) * divergence.data[i];
+  }
 
-// // apply pressure update
-// // TODO use ghost fluid method
-// // FIXME add variable densities
-// void Simulation::apply_pressure_gradient(float dt) {
-//   for (int i = 1; i < nx; i++) {
-//     for (int j = 1; j < ny; j++) {
-//       for (int k = 1; k < nz; k++) {
-//         // note: density is sampled at grid faces
-//         if ((solid_phi(i, j, k) > 0 && solid_phi(i - 1, j, k) > 0) &&
-//             (liquid_phi(i - 1, j, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-//           u(i, j, k) -= (dt / (density_1 * h)) *
-//                         (pressure(i, j, k) - pressure(i - 1, j, k));
-//         }
+  // solve Ax=b
+  Eigen::VectorXd x(nf);
+  Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver;
+  solver.compute(A);
+  x = solver.solve(b);
 
-//         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j - 1, k) > 0) &&
-//             (liquid_phi(i, j - 1, k) <= 0 || liquid_phi(i, j, k) <= 0)) {
-//           v(i, j, k) -= (dt / (density_1 * h)) *
-//                         (pressure(i, j, k) - pressure(i, j - 1, k));
-//         }
+  if (solver.info() != Eigen::Success) {
+    throw std::runtime_error("pressure not solved");
+  }
 
-//         if ((solid_phi(i, j, k) > 0 && solid_phi(i, j, k - 1) > 0) &&
-//             (liquid_phi(i, j, k - 1) <= 0 || liquid_phi(i, j, k) <= 0)) {
-//           w(i, j, k) -= (dt / (density_1 * h)) *
-//                         (pressure(i, j, k) - pressure(i, j, k - 1));
-//         }
-//       }
-//     }
-//   }
-// }
+  // set pressure
+  pressure.clear();
+  for (int i = 0; i < pressure.size; i++) {
+    if (fl_index.data[i] >= 0)
+      pressure.data[i] = x(fl_index.data[i]);
+  }
+}
+
+// apply pressure update
+void Simulation::apply_pressure_gradient(float dt) {
+  for (int i = 1; i < nx; i++) {
+    for (int j = 1; j < ny; j++) {
+      for (int k = 1; k < nz; k++) {
+        for (auto &offs : update_offsets) {
+          bool neither_solid =
+              (solid_phi(i, j, k) > 0 &&
+               solid_phi(i + offs.x, j + offs.y, k + offs.z) > 0);
+          bool either_fluid =
+              ((fluids[grid_ids(i, j, k)].density != 0) ||
+               (fluids[grid_ids(i + offs.x, j + offs.y, k + offs.z)].density !=
+                0));
+          if (neither_solid && either_fluid) {
+            float diff = (1.0f / fixed_density) * (dt / h) *
+                         (pressure(i, j, k) -
+                          pressure(i + offs.x, j + offs.y, k + offs.z));
+            if (offs.x != 0) {
+              u(i, j, k) -= diff;
+            } else if (offs.y != 0) {
+              v(i, j, k) -= diff;
+            } else if (offs.z != 0) {
+              w(i, j, k) -= diff;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void Simulation::extend_velocity() {
+  // create a "liquid phi" which gives
+  // the minima of all phi vals at each grid
+  // point that have 0 density
+  liquid_phi.clear();
+  for (int i = 0; i < liquid_phi.size; i++) {
+    float min_phi = (nx + ny + nz) * h;
+    for (auto &f : fluids) {
+      if (f.density != 0 && f.phi.data[i] < min_phi)
+        min_phi = f.phi.data[i];
+    }
+    liquid_phi.data[i] = min_phi;
+  }
+  // sweep
+  for (int i = 0; i < 8; i++) {
+    sweep_velocity();
+  }
+}
+
+void Simulation::sweep_velocity() {
+  // U --------------------------------
+  sweep_u(1, u.sx - 1, 1, u.sy - 1, 1, u.sz - 1);
+  sweep_u(1, u.sx - 1, 1, u.sy - 1, u.sz - 2, 0);
+  sweep_u(1, u.sx - 1, u.sy - 2, 0, 1, u.sz - 1);
+  sweep_u(1, u.sx - 1, u.sy - 2, 0, u.sz - 2, 0);
+  sweep_u(u.sx - 2, 0, 1, u.sy - 1, 1, u.sz - 1);
+  sweep_u(u.sx - 2, 0, 1, u.sy - 1, u.sz - 2, 0);
+  sweep_u(u.sx - 2, 0, u.sy - 2, 0, 1, u.sz - 1);
+  sweep_u(u.sx - 2, 0, u.sy - 2, 0, u.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(u);
+
+  // V --------------------------------
+  sweep_v(1, v.sx - 1, 1, v.sy - 1, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, 1, v.sy - 1, v.sz - 2, 0);
+  sweep_v(1, v.sx - 1, v.sy - 2, 0, 1, v.sz - 1);
+  sweep_v(1, v.sx - 1, v.sy - 2, 0, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 1, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, 1, v.sy - 1, v.sz - 2, 0);
+  sweep_v(v.sx - 2, 0, v.sy - 2, 0, 1, v.sz - 1);
+  sweep_v(v.sx - 2, 0, v.sy - 2, 0, v.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(v);
+
+  // W --------------------------------
+  sweep_w(1, w.sx - 1, 1, w.sy - 1, 1, w.sz - 1);
+  sweep_w(1, w.sx - 1, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(1, w.sx - 1, w.sy - 2, 0, 1, w.sz - 1);
+  sweep_w(1, w.sx - 1, w.sy - 2, 0, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, 1, w.sy - 1, 1, w.sz - 1);
+  sweep_w(w.sx - 2, 0, 1, w.sy - 1, w.sz - 2, 0);
+  sweep_w(w.sx - 2, 0, w.sy - 2, 0, 1, w.sz - 1);
+  sweep_w(w.sx - 2, 0, w.sy - 2, 0, w.sz - 2, 0);
+  // set boundary cells
+  sweep_velocity_boundary(w);
+}
+
+void Simulation::sweep_velocity_boundary(Array3f &arr) {
+  // top and bottom
+  for (int i = 0; i < arr.sx; i++) {
+    for (int k = 0; k < arr.sz; k++) {
+      arr(i, 0, k) = arr(i, 1, k);
+      arr(i, arr.sy - 1, k) = arr(i, arr.sy - 2, k);
+    }
+  }
+  // left and right
+  for (int j = 0; j < arr.sy; j++) {
+    for (int k = 0; k < arr.sz; k++) {
+      arr(0, j, k) = arr(1, j, k);
+      arr(arr.sx - 1, j, k) = arr(arr.sx - 2, j, k);
+    }
+  }
+  // front and back
+  for (int i = 0; i < arr.sx; i++) {
+    for (int j = 0; j < arr.sy; j++) {
+      arr(i, j, 0) = arr(i, j, 1);
+      arr(i, j, arr.sz - 1) = arr(i, j, arr.sz - 2);
+    }
+  }
+}
+
+void Simulation::sweep_u(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i - 1, j, k) > 0 && liquid_phi(i, j, k) > 0) {
+          float dp = di * (liquid_phi(i, j, k) - liquid_phi(i - 1, j, k));
+          if (dp < 0)
+            continue;
+          // avg y-dir phi change
+          float dq =
+              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - 1, j - dj, k) - liquid_phi(i, j - dj, k));
+          if (dq < 0)
+            continue;
+          // avg z-dir phi change
+          float dr =
+              0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - 1, j, k - dk) - liquid_phi(i, j, k - dk));
+          if (dr < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            u(i, j, k) =
+                weight * (u(i - di, j, k) + u(i, j - dj, k) + u(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            u(i, j, k) = dp * weight * u(i - di, j, k) +
+                         dq * weight * u(i, j - dj, k) +
+                         dr * weight * u(i, j, k - dk);
+          }
+        }
+      }
+    }
+  }
+}
+void Simulation::sweep_v(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i, j - 1, k) > 0 && liquid_phi(i, j, k) > 0) {
+          float dq = dj * (liquid_phi(i, j, k) - liquid_phi(i, j - 1, k));
+          if (dq < 0)
+            continue;
+          // avg x-dir phi change
+          float dp =
+              0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
+                     liquid_phi(i - di, j - 1, k) - liquid_phi(i - di, j, k));
+          if (dp < 0)
+            continue;
+          // avg z-dir phi change
+          float dr = 0.5 * (liquid_phi(i - 1, j - 1, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i - 1, j - 1, k - dk) -
+                            liquid_phi(i, j, k - dk));
+          if (dr < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            v(i, j, k) =
+                weight * (v(i - di, j, k) + v(i, j - dj, k) + v(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            v(i, j, k) = dp * weight * v(i - di, j, k) +
+                         dq * weight * v(i, j - dj, k) +
+                         dr * weight * v(i, j, k - dk);
+          }
+        }
+      }
+    }
+  }
+}
+
+void Simulation::sweep_w(int i0, int i1, int j0, int j1, int k0, int k1) {
+  int di = (i0 < i1) ? 1 : -1;
+  int dj = (j0 < j1) ? 1 : -1;
+  int dk = (k0 < k1) ? 1 : -1;
+
+  float weight;
+
+  for (int i = i0; i != i1; i += di) {
+    for (int j = j0; j != j1; j += dj) {
+      for (int k = k0; k != k1; k += dk) {
+        if (liquid_phi(i, j, k - 1) > 0 && liquid_phi(i, j, k) > 0) {
+          float dr = dk * (liquid_phi(i, j, k) - liquid_phi(i, j, k - 1));
+          if (dr < 0)
+            continue;
+          // avg y-dir phi change
+          float dq = 0.5 * (liquid_phi(i, j - 1, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i, j - dj, k - dk) -
+                            liquid_phi(i, j - 1, k - dk));
+          if (dq < 0)
+            continue;
+          // avg x-dir phi change
+          float dp = 0.5 * (liquid_phi(i - 1, j, k) + liquid_phi(i, j, k) -
+                            liquid_phi(i - 1, j - 1, k - dk) -
+                            liquid_phi(i - 1, j, k - dk));
+          if (dp < 0)
+            continue;
+
+          // weighted sum of other velocities
+          if (dp + dq + dr == 0) {
+            weight = 1.0f / 3.0f;
+            w(i, j, k) =
+                weight * (w(i - di, j, k) + w(i, j - dj, k) + w(i, j, k - dk));
+          } else {
+            weight = 1.0f / (dp + dq + dr);
+            w(i, j, k) = dp * weight * w(i - di, j, k) +
+                         dq * weight * w(i, j - dj, k) +
+                         dr * weight * w(i, j, k - dk);
+          }
+        }
+      }
+    }
+  }
+}
 
 // advance the simulation by a given time
 // the time will be split up into substeps
@@ -664,5 +887,6 @@ void Simulation::advance(float dt) {
 
     enforce_boundaries();
     project(substep); // TODO
+    extend_velocity();
   }
 }

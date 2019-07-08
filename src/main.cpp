@@ -22,15 +22,20 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action,
     glfwSetWindowShouldClose(window, GLFW_TRUE);
     return;
   } else if (key == GLFW_KEY_V && action == GLFW_RELEASE) {
+    gui->dirty = true;
     gui->draw_velocity = !gui->draw_velocity;
   } else if (key == GLFW_KEY_B && action == GLFW_RELEASE) {
+    gui->dirty = true;
     gui->draw_particles = !gui->draw_particles;
   } else if (key == GLFW_KEY_G && action == GLFW_RELEASE) {
+    gui->dirty = true;
     gui->draw_grid = !gui->draw_grid;
   } else if (key == GLFW_KEY_F && action == GLFW_RELEASE) {
+    gui->dirty = true;
     gui->display_phi = !gui->display_phi;
   } else if (key == GLFW_KEY_MINUS && action == GLFW_RELEASE) {
     // cycle through levelsets to draw
+    gui->dirty = true;
     gui->levelset_to_draw =
         (gui->levelset_to_draw + 1) % gui->simulation.fluids.size();
   }
@@ -78,7 +83,7 @@ int main(int argc, char *argv[]) {
   glfwSetCursorPosCallback(window, MousePosCallback);
   glfwSetMouseButtonCallback(window, MouseButtonCallback);
 
-  gui.init(2.0f, 25, 25, 25);
+  gui.init(2.0f, 15, 15, 15);
 
   while (!glfwWindowShouldClose(window)) {
     gui.update();

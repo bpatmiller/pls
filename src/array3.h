@@ -308,5 +308,4 @@ template <class T> struct Array3 {
 typedef Array3<double> Array3d;
 typedef Array3<float> Array3f;
 typedef Array3<int> Array3i;
-typedef Array3<glm::vec3> Array3v3;
-typedef Array3<glm::dvec4> Array3v4;
+typedef Array3<uint> Array3u;
