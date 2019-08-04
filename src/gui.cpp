@@ -187,7 +187,7 @@ void GUI::update(float t, bool force) {
     velocity_vao.ib.update(vel_offsets, 0);
 
     particle_vao.setLayout({3, 1, 1, 1, 1}, true);
-    particle_vao.ib.set(simulation.fluids[0].particles);
+    particle_vao.ib.set(simulation.fluids[levelset_to_draw].particles);
   }
 
   // draw velocity field
